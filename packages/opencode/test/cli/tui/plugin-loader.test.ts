@@ -2,13 +2,11 @@ import { beforeAll, describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import type { CliRenderer } from "@opentui/core"
 import { tmpdir } from "../../fixture/fixture"
+import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { Global } from "../../../src/global"
 import { TuiConfig } from "../../../src/config/tui"
 import { Config } from "../../../src/config/config"
-import { createPluginKeybind } from "../../../src/cli/cmd/tui/context/plugin-keybinds"
 
 const { allThemes, addTheme } = await import("../../../src/cli/cmd/tui/context/theme")
 const { TuiPlugin } = await import("../../../src/cli/cmd/tui/plugin/runtime")
@@ -309,142 +307,40 @@ export const object_plugin = {
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const install = spyOn(Config, "installDependencies").mockResolvedValue()
-  let selected = "opencode"
-  let depth = 0
-  let size: "medium" | "large" = "medium"
-
-  const renderer = {
-    ...Object.create(null),
-    once(this: CliRenderer) {
-      return this
-    },
-  } satisfies CliRenderer
-  const kv: Record<string, unknown> = {}
-  const keybind = {
-    parse: (evt: { name?: string; ctrl?: boolean; meta?: boolean; shift?: boolean; super?: boolean }) => ({
-      name: evt.name ?? "",
-      ctrl: evt.ctrl ?? false,
-      meta: evt.meta ?? false,
-      shift: evt.shift ?? false,
-      super: evt.super,
-      leader: false,
-    }),
-    match: () => false,
-    print: (key: string) => `print:${key}`,
-  }
 
   try {
     expect(addTheme(tmp.extra.preloadedThemeName, { theme: { primary: "#303030" } })).toBe(true)
 
-    await TuiPlugin.init({
-      client: createOpencodeClient({
-        baseUrl: "http://localhost:4096",
+    await TuiPlugin.init(
+      createTuiPluginApi({
+        keybind: {
+          print: (key) => `print:${key}`,
+        },
+        state: {
+          session: {
+            diff(sessionID) {
+              if (sessionID !== "ses_test") return []
+              return [{ file: "src/app.ts", additions: 3, deletions: 1 }]
+            },
+            todo(sessionID) {
+              if (sessionID !== "ses_test") return []
+              return [{ content: "ship it", status: "pending" }]
+            },
+          },
+          lsp() {
+            return [{ id: "ts", root: "/tmp/project", status: "connected" }]
+          },
+          mcp() {
+            return [{ name: "github", status: "connected" }]
+          },
+        },
+        theme: {
+          has(name) {
+            return allThemes()[name] !== undefined
+          },
+        },
       }),
-      event: {
-        on: () => () => {},
-      },
-      renderer,
-      command: {
-        register: () => () => {},
-        trigger: () => {},
-      },
-      route: {
-        register: () => () => {},
-        navigate: () => {},
-        get current() {
-          return { name: "home" as const }
-        },
-      },
-      ui: {
-        Dialog: () => null,
-        DialogAlert: () => null,
-        DialogConfirm: () => null,
-        DialogPrompt: () => null,
-        DialogSelect: () => null,
-        toast: () => {},
-        dialog: {
-          replace: () => {
-            depth = 1
-          },
-          clear: () => {
-            depth = 0
-            size = "medium"
-          },
-          setSize: (next) => {
-            size = next
-          },
-          get size() {
-            return size
-          },
-          get depth() {
-            return depth
-          },
-          get open() {
-            return depth > 0
-          },
-        },
-      },
-      keybind: {
-        ...keybind,
-        create(defaults, overrides) {
-          return createPluginKeybind(keybind, defaults, overrides)
-        },
-      },
-      kv: {
-        get(key, fallback) {
-          return (kv[key] ?? fallback) as never
-        },
-        set(key, value) {
-          kv[key] = value
-        },
-        get ready() {
-          return true
-        },
-      },
-      state: {
-        session: {
-          diff(sessionID) {
-            if (sessionID !== "ses_test") return []
-            return [{ file: "src/app.ts", additions: 3, deletions: 1 }]
-          },
-          todo(sessionID) {
-            if (sessionID !== "ses_test") return []
-            return [{ content: "ship it", status: "pending" }]
-          },
-        },
-        lsp() {
-          return [{ id: "ts", root: "/tmp/project", status: "connected" }]
-        },
-        mcp() {
-          return [{ name: "github", status: "connected" }]
-        },
-      },
-      theme: {
-        get current() {
-          return {}
-        },
-        get selected() {
-          return selected
-        },
-        has(name) {
-          return allThemes()[name] !== undefined
-        },
-        set(name) {
-          if (!allThemes()[name]) return false
-          selected = name
-          return true
-        },
-        async install() {
-          throw new Error("base theme.install should not run")
-        },
-        mode() {
-          return "dark" as const
-        },
-        get ready() {
-          return true
-        },
-      },
-    })
+    )
     const local = JSON.parse(await fs.readFile(tmp.extra.localMarker, "utf8")) as Row
     const global = JSON.parse(await fs.readFile(tmp.extra.globalMarker, "utf8")) as Row
     const invalid = JSON.parse(await fs.readFile(tmp.extra.invalidMarker, "utf8")) as Row

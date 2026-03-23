@@ -2,11 +2,9 @@ import { expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import type { CliRenderer } from "@opentui/core"
 import { tmpdir } from "../../fixture/fixture"
+import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { TuiConfig } from "../../../src/config/tui"
-import { createPluginKeybind } from "../../../src/cli/cmd/tui/context/plugin-keybinds"
 
 const { TuiPlugin } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
@@ -89,127 +87,9 @@ test("continues loading tui plugins when a plugin is missing config metadata", a
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
 
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  let selected = "opencode"
-  const renderer = {
-    ...Object.create(null),
-    once(this: CliRenderer) {
-      return this
-    },
-  } satisfies CliRenderer
-  const kv: Record<string, unknown> = {}
-  const keybind = {
-    parse: (evt: { name?: string; ctrl?: boolean; meta?: boolean; shift?: boolean; super?: boolean }) => ({
-      name: evt.name ?? "",
-      ctrl: evt.ctrl ?? false,
-      meta: evt.meta ?? false,
-      shift: evt.shift ?? false,
-      super: evt.super,
-      leader: false,
-    }),
-    match: () => false,
-    print: (key: string) => key,
-  }
 
   try {
-    await TuiPlugin.init({
-      client: createOpencodeClient({
-        baseUrl: "http://localhost:4096",
-      }),
-      event: {
-        on: () => () => {},
-      },
-      renderer,
-      command: {
-        register: () => () => {},
-        trigger: () => {},
-      },
-      route: {
-        register: () => () => {},
-        navigate: () => {},
-        get current() {
-          return { name: "home" as const }
-        },
-      },
-      ui: {
-        Dialog: () => null,
-        DialogAlert: () => null,
-        DialogConfirm: () => null,
-        DialogPrompt: () => null,
-        DialogSelect: () => null,
-        toast: () => {},
-        dialog: {
-          replace: () => {},
-          clear: () => {},
-          setSize: () => {},
-          get size() {
-            return "medium" as const
-          },
-          get depth() {
-            return 0
-          },
-          get open() {
-            return false
-          },
-        },
-      },
-      keybind: {
-        ...keybind,
-        create(defaults, overrides) {
-          return createPluginKeybind(keybind, defaults, overrides)
-        },
-      },
-      kv: {
-        get(key, fallback) {
-          return (kv[key] ?? fallback) as never
-        },
-        set(key, value) {
-          kv[key] = value
-        },
-        get ready() {
-          return true
-        },
-      },
-      state: {
-        session: {
-          diff() {
-            return []
-          },
-          todo() {
-            return []
-          },
-        },
-        lsp() {
-          return []
-        },
-        mcp() {
-          return []
-        },
-      },
-      theme: {
-        get current() {
-          return {}
-        },
-        get selected() {
-          return selected
-        },
-        has() {
-          return false
-        },
-        set(name) {
-          selected = name
-          return true
-        },
-        async install() {
-          throw new Error("base theme.install should not run")
-        },
-        mode() {
-          return "dark" as const
-        },
-        get ready() {
-          return true
-        },
-      },
-    })
+    await TuiPlugin.init(createTuiPluginApi())
 
     await expect(fs.readFile(tmp.extra.badMarker, "utf8")).rejects.toThrow()
     await expect(fs.readFile(tmp.extra.nextMarker, "utf8")).resolves.toBe("called")

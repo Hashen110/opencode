@@ -2,9 +2,8 @@ import { expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import type { CliRenderer } from "@opentui/core"
 import { tmpdir } from "../../fixture/fixture"
+import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { TuiConfig } from "../../../src/config/tui"
 
 const { TuiPlugin } = await import("../../../src/cli/cmd/tui/plugin/runtime")
@@ -16,135 +15,6 @@ type Count = {
   route_drop: number
   command_add: number
   command_drop: number
-}
-
-function api(count: Count) {
-  let selected = "opencode"
-  const kv: Record<string, unknown> = {}
-
-  return {
-    client: createOpencodeClient({
-      baseUrl: "http://localhost:4096",
-    }),
-    event: {
-      on: () => {
-        count.event_add += 1
-        return () => {
-          count.event_drop += 1
-        }
-      },
-    },
-    renderer: {
-      ...Object.create(null),
-      once(this: CliRenderer) {
-        return this
-      },
-    } satisfies CliRenderer,
-    command: {
-      register: () => {
-        count.command_add += 1
-        return () => {
-          count.command_drop += 1
-        }
-      },
-      trigger: () => {},
-    },
-    route: {
-      register: () => {
-        count.route_add += 1
-        return () => {
-          count.route_drop += 1
-        }
-      },
-      navigate: () => {},
-      get current() {
-        return { name: "home" as const }
-      },
-    },
-    ui: {
-      Dialog: () => null,
-      DialogAlert: () => null,
-      DialogConfirm: () => null,
-      DialogPrompt: () => null,
-      DialogSelect: () => null,
-      toast: () => {},
-      dialog: {
-        replace: () => {},
-        clear: () => {},
-        setSize: () => {},
-        get size() {
-          return "medium" as const
-        },
-        get depth() {
-          return 0
-        },
-        get open() {
-          return false
-        },
-      },
-    },
-    keybind: {
-      match: () => false,
-      print: (key: string) => key,
-      create(defaults: Record<string, string>) {
-        return {
-          all: defaults,
-          get: (name: string) => defaults[name] ?? name,
-          match: () => false,
-          print: (name: string) => defaults[name] ?? name,
-        }
-      },
-    },
-    kv: {
-      get(key: string, fallback: unknown) {
-        return (kv[key] ?? fallback) as never
-      },
-      set(key: string, value: unknown) {
-        kv[key] = value
-      },
-      get ready() {
-        return true
-      },
-    },
-    state: {
-      session: {
-        diff() {
-          return []
-        },
-        todo() {
-          return []
-        },
-      },
-      lsp() {
-        return []
-      },
-      mcp() {
-        return []
-      },
-    },
-    theme: {
-      get current() {
-        return {}
-      },
-      get selected() {
-        return selected
-      },
-      has() {
-        return false
-      },
-      set(name: string) {
-        selected = name
-        return true
-      },
-      async install() {},
-      mode() {
-        return "dark" as const
-      },
-      get ready() {
-        return true
-      },
-    },
-  }
 }
 
 test("disposes tracked event, route, and command hooks", async () => {
@@ -205,7 +75,7 @@ test("disposes tracked event, route, and command hooks", async () => {
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
-    await TuiPlugin.init(api(count))
+    await TuiPlugin.init(createTuiPluginApi({ count }))
 
     expect(count.event_add).toBe(1)
     expect(count.event_drop).toBe(0)
@@ -312,7 +182,7 @@ test("rolls back failed plugin exports and continues loading", async () => {
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
-    await TuiPlugin.init(api(count))
+    await TuiPlugin.init(createTuiPluginApi({ count }))
 
     await expect(fs.readFile(tmp.extra.badMarker, "utf8")).resolves.toBe("cleaned")
     await expect(fs.readFile(tmp.extra.goodMarker, "utf8")).resolves.toBe("called")
@@ -374,7 +244,7 @@ test(
     const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
     try {
-      await TuiPlugin.init(api(count))
+      await TuiPlugin.init(createTuiPluginApi({ count }))
 
       const done = await new Promise<string>((resolve) => {
         const timer = setTimeout(() => {
