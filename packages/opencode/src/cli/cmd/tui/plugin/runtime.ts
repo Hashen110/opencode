@@ -3,7 +3,7 @@ import {
   type TuiDispose,
   type TuiPlugin as TuiPluginFn,
   type TuiPluginApi,
-  type TuiPluginInit,
+  type TuiPluginMeta,
   type TuiTheme,
 } from "@opencode-ai/plugin/tui"
 import type { JSX } from "@opentui/solid"
@@ -215,16 +215,16 @@ async function prepPlugin(config: TuiConfig.Info, item: Config.PluginSpec, retry
   }
 }
 
-function createInit(
+function createMeta(
   spec: string,
   target: string,
   meta: Awaited<ReturnType<typeof PluginMeta.touch>> | undefined,
   name?: string,
-): TuiPluginInit {
+): TuiPluginMeta {
   if (meta) {
     return {
       state: meta.state,
-      entry: meta.entry,
+      ...meta.entry,
     }
   }
 
@@ -232,17 +232,15 @@ function createInit(
   const now = Date.now()
   return {
     state: source === "internal" ? "same" : "first",
-    entry: {
-      name: name ?? spec,
-      source,
-      spec,
-      target,
-      first_time: now,
-      last_time: now,
-      time_changed: now,
-      load_count: 1,
-      fingerprint: target,
-    },
+    name: name ?? spec,
+    source,
+    spec,
+    target,
+    first_time: now,
+    last_time: now,
+    time_changed: now,
+    load_count: 1,
+    fingerprint: target,
   }
 }
 
@@ -400,7 +398,7 @@ function pluginApi(api: HostPluginApi, load: Loaded, state: Scope) {
   } satisfies TuiPluginApi<CliRenderer, JSX.Element>
 }
 
-async function applyPlugin(api: HostPluginApi, load: Loaded, init: TuiPluginInit, all: Scope[]) {
+async function applyPlugin(api: HostPluginApi, load: Loaded, meta: TuiPluginMeta, all: Scope[]) {
   const opts = load.item ? Config.pluginOptions(load.item) : undefined
 
   for (const [name, value] of uniqueModuleEntries(load.mod)) {
@@ -422,7 +420,7 @@ async function applyPlugin(api: HostPluginApi, load: Loaded, init: TuiPluginInit
       .then(async () => {
         if (slotPlugin) state.wrap(api.slots.register(slotPlugin))
         if (!tuiPlugin) return true
-        await tuiPlugin(pluginApi(api, load, state), opts, init)
+        await tuiPlugin(pluginApi(api, load, state), opts, meta)
         return true
       })
       .catch((error) => {
@@ -492,7 +490,7 @@ export namespace TuiPlugin {
         for (const item of INTERNAL_TUI_PLUGINS) {
           log.info("loading internal tui plugin", { name: item.name })
           const entry = prepInternalPlugin(item)
-          await applyPlugin(api, entry, createInit(entry.spec, entry.target, undefined, item.name), next)
+          await applyPlugin(api, entry, createMeta(entry.spec, entry.target, undefined, item.name), next)
         }
 
         const loaded = await Promise.all(plugins.map((item) => prepPlugin(config, item)))
@@ -538,7 +536,7 @@ export namespace TuiPlugin {
           // command registration order affects keybind/command precedence,
           // route registration is last-wins when ids collide,
           // and hook chains rely on stable plugin ordering.
-          await applyPlugin(api, entry, createInit(entry.spec, entry.target, hit), next)
+          await applyPlugin(api, entry, createMeta(entry.spec, entry.target, hit), next)
         }
 
         list = next

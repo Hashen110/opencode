@@ -301,7 +301,7 @@ export type TuiLifecycle = {
 
 export type TuiPluginState = "first" | "updated" | "same"
 
-export type TuiPluginMeta = {
+export type TuiPluginEntry = {
   name: string
   source: "file" | "npm" | "internal"
   spec: string
@@ -316,9 +316,8 @@ export type TuiPluginMeta = {
   fingerprint: string
 }
 
-export type TuiPluginInit = {
+export type TuiPluginMeta = TuiPluginEntry & {
   state: TuiPluginState
-  entry: TuiPluginMeta
 }
 
 export type TuiHostPluginApi<Renderer = CliRenderer, Node = unknown> = TuiApi<Node> & {
@@ -335,7 +334,7 @@ export type TuiPluginApi<Renderer = CliRenderer, Node = unknown> = TuiHostPlugin
 export type TuiPlugin<Renderer = CliRenderer, Node = unknown> = (
   api: TuiPluginApi<Renderer, Node>,
   options: PluginOptions | undefined,
-  init: TuiPluginInit,
+  meta: TuiPluginMeta,
 ) => Promise<void>
 
 export type TuiPluginModule<Renderer = CliRenderer, Node = unknown> = {

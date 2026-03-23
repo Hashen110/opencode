@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { RGBA, VignetteEffect } from "@opentui/core"
-import type { TuiApi, TuiKeybindSet, TuiPluginApi, TuiPluginInit, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
+import type { TuiApi, TuiKeybindSet, TuiPluginApi, TuiPluginMeta, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
 
 const tabs = ["overview", "counter", "help"]
 const bind = {
@@ -269,7 +269,7 @@ const Screen = (props: {
   input: Cfg
   route: Route
   keys: Keys
-  meta: TuiPluginInit
+  meta: TuiPluginMeta
   params?: Record<string, unknown>
 }) => {
   const dim = useTerminalDimensions()
@@ -460,9 +460,9 @@ const Screen = (props: {
               <text fg={skin.muted}>plugin state: {props.meta.state}</text>
               <text fg={skin.muted}>
                 first: {props.meta.state === "first" ? "yes" : "no"} · updated:{" "}
-                {props.meta.state === "updated" ? "yes" : "no"} · loads: {props.meta.entry.load_count}
+                {props.meta.state === "updated" ? "yes" : "no"} · loads: {props.meta.load_count}
               </text>
-              <text fg={skin.muted}>plugin source: {props.meta.entry.source}</text>
+              <text fg={skin.muted}>plugin source: {props.meta.source}</text>
               <text fg={skin.muted}>source: {value.source}</text>
               <text fg={skin.muted}>note: {value.note || "(none)"}</text>
               <text fg={skin.muted}>selected: {value.selected || "(none)"}</text>
@@ -931,7 +931,7 @@ const reg = (api: TuiApi, input: Cfg, keys: Keys) => {
   ])
 }
 
-const tui = async (api: TuiPluginApi, options: Record<string, unknown> | null, meta: TuiPluginInit) => {
+const tui = async (api: TuiPluginApi, options: Record<string, unknown> | null, meta: TuiPluginMeta) => {
   if (options?.enabled === false) return
 
   await api.theme.install("./smoke-theme.json")
