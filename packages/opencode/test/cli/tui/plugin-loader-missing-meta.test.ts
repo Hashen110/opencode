@@ -121,7 +121,7 @@ test("continues loading tui plugins when a plugin is missing config metadata", a
       renderer,
       api: {
         command: {
-          register: () => {},
+          register: () => () => {},
           trigger: () => {},
         },
         route: {

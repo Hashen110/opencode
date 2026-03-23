@@ -104,17 +104,31 @@ function init() {
     },
     register(cb: () => CommandOption[]) {
       const owner = getOwner() ?? root
-      if (!owner) return
+      if (!owner) return () => {}
+
+      let list: Accessor<CommandOption[]> | undefined
 
       // TUI plugins now register commands via an async store that runs outside an active reactive scope.
       // runWithOwner attaches createMemo/onCleanup to this owner so plugin registrations stay reactive and dispose correctly.
       runWithOwner(owner, () => {
-        const list = createMemo(cb)
-        setRegistrations((arr) => [list, ...arr])
+        list = createMemo(cb)
+        const ref = list
+        if (!ref) return
+        setRegistrations((arr) => [ref, ...arr])
         onCleanup(() => {
-          setRegistrations((arr) => arr.filter((x) => x !== list))
+          setRegistrations((arr) => arr.filter((x) => x !== ref))
         })
       })
+
+      if (!list) return () => {}
+      let done = false
+      return () => {
+        if (done) return
+        done = true
+        const ref = list
+        if (!ref) return
+        setRegistrations((arr) => arr.filter((x) => x !== ref))
+      }
     },
   }
   return result

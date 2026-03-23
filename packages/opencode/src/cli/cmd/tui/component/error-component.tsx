@@ -8,6 +8,7 @@ import { win32FlushInputBuffer } from "../win32"
 export function ErrorComponent(props: {
   error: Error
   reset: () => void
+  onBeforeExit?: () => Promise<void>
   onExit: () => Promise<void>
   mode?: "dark" | "light"
 }) {
@@ -15,6 +16,7 @@ export function ErrorComponent(props: {
   const renderer = useRenderer()
 
   const handleExit = async () => {
+    await props.onBeforeExit?.()
     renderer.setTerminalTitle("")
     renderer.destroy()
     win32FlushInputBuffer()

@@ -346,7 +346,7 @@ export const object_plugin = {
       renderer,
       api: {
         command: {
-          register: () => {},
+          register: () => () => {},
           trigger: () => {},
         },
         route: {

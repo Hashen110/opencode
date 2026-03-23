@@ -1,5 +1,6 @@
 import "@opentui/solid/runtime-plugin-support"
 import {
+  type TuiDispose,
   type TuiPlugin as TuiPluginFn,
   type TuiPluginInit,
   type TuiPluginInput,
@@ -34,6 +35,12 @@ type Loaded = {
 type Deps = {
   wait?: Promise<void>
 }
+
+type HostInput = InitInput & {
+  slots: TuiPluginInput<CliRenderer, JSX.Element>["slots"]
+}
+
+type Scope = ReturnType<typeof scope>
 
 const log = Log.create({ service: "tui.plugin" })
 
@@ -235,10 +242,85 @@ function prepInternalPlugin(item: InternalTuiPlugin): Loaded {
   }
 }
 
-async function applyPlugin(input: TuiPluginInput<CliRenderer, JSX.Element>, load: Loaded, init: TuiPluginInit) {
+function scope(load: Loaded, name: string) {
+  const ctrl = new AbortController()
+  let list: { key: symbol; fn: TuiDispose }[] = []
+  let done = false
+
+  const onDispose = (fn: TuiDispose) => {
+    if (done) return () => {}
+    const key = Symbol()
+    list.push({ key, fn })
+    let drop = false
+    return () => {
+      if (drop) return
+      drop = true
+      list = list.filter((x) => x.key !== key)
+    }
+  }
+
+  const wrap = (fn: (() => void) | undefined) => {
+    if (!fn) return () => {}
+    const off = onDispose(fn)
+    let drop = false
+    return () => {
+      if (drop) return
+      drop = true
+      off()
+      fn()
+    }
+  }
+
+  const lifecycle = {
+    signal: ctrl.signal,
+    onDispose,
+  } satisfies TuiPluginInput<CliRenderer, JSX.Element>["lifecycle"]
+
+  const dispose = async () => {
+    if (done) return
+    done = true
+    ctrl.abort()
+    const queue = [...list].reverse()
+    list = []
+    for (const item of queue) {
+      await Promise.resolve(item.fn()).catch((error) => {
+        fail("failed to clean up tui plugin", {
+          path: load.spec,
+          name,
+          error,
+        })
+      })
+    }
+  }
+
+  return {
+    lifecycle,
+    wrap,
+    dispose,
+  }
+}
+
+function pluginInput(input: HostInput, load: Loaded, state: Scope) {
   const api = {
-    command: input.api.command,
-    route: input.api.route,
+    command: {
+      register(cb) {
+        return state.wrap(input.api.command.register(cb))
+      },
+      trigger(value) {
+        input.api.command.trigger(value)
+      },
+    },
+    route: {
+      register(list) {
+        return state.wrap(input.api.route.register(list))
+      },
+      navigate(name, params) {
+        input.api.route.navigate(name, params)
+      },
+      get current() {
+        return input.api.route.current
+      },
+    },
     ui: input.api.ui,
     keybind: input.api.keybind,
     theme: Object.create(input.api.theme, {
@@ -251,6 +333,29 @@ async function applyPlugin(input: TuiPluginInput<CliRenderer, JSX.Element>, load
     kv: input.api.kv,
     state: input.api.state,
   } satisfies TuiPluginInput<CliRenderer, JSX.Element>["api"]
+
+  const event = {
+    on(type, handler) {
+      return state.wrap(input.event.on(type, handler))
+    },
+  } satisfies TuiPluginInput<CliRenderer, JSX.Element>["event"]
+
+  const slots = {
+    register(plugin) {
+      return state.wrap(input.slots.register(plugin))
+    },
+  } satisfies TuiPluginInput<CliRenderer, JSX.Element>["slots"]
+
+  return {
+    ...input,
+    event,
+    slots,
+    api,
+    lifecycle: state.lifecycle,
+  } satisfies TuiPluginInput<CliRenderer, JSX.Element>
+}
+
+async function applyPlugin(input: HostInput, load: Loaded, init: TuiPluginInit, all: Scope[]) {
   const opts = load.item ? Config.pluginOptions(load.item) : undefined
 
   for (const [name, value] of uniqueModuleEntries(load.mod)) {
@@ -264,29 +369,45 @@ async function applyPlugin(input: TuiPluginInput<CliRenderer, JSX.Element>, load
     }
 
     const slotPlugin = getTuiSlotPlugin(value)
-    if (slotPlugin) input.slots.register(slotPlugin)
-
     const tuiPlugin = getTuiPlugin(value)
-    if (!tuiPlugin) continue
-    await tuiPlugin(
-      {
-        ...input,
-        api,
-      },
-      opts,
-      init,
-    )
+    if (!slotPlugin && !tuiPlugin) continue
+
+    const state = scope(load, name)
+    const ready = await Promise.resolve()
+      .then(async () => {
+        if (slotPlugin) state.wrap(input.slots.register(slotPlugin))
+        if (!tuiPlugin) return true
+        await tuiPlugin(pluginInput(input, load, state), opts, init)
+        return true
+      })
+      .catch((error) => {
+        fail("failed to initialize tui plugin export", {
+          path: load.spec,
+          name,
+          error,
+        })
+        return false
+      })
+
+    if (!ready) {
+      await state.dispose()
+      continue
+    }
+
+    all.push(state)
   }
 }
 
 export namespace TuiPlugin {
   let dir = ""
   let loaded: Promise<void> | undefined
+  let list: Scope[] = []
   export const Slot = View
 
   export async function init(input: InitInput) {
     const cwd = process.cwd()
     if (loaded && dir === cwd) return loaded
+    if (loaded) await dispose()
     dir = cwd
     loaded = load({
       ...input,
@@ -295,11 +416,23 @@ export namespace TuiPlugin {
     return loaded
   }
 
-  async function load(input: TuiPluginInput<CliRenderer, JSX.Element>) {
-    const dir = process.cwd()
+  export async function dispose() {
+    const task = loaded
+    if (task) await task
+    const queue = [...list].reverse()
+    list = []
+    loaded = undefined
+    for (const state of queue) {
+      await state.dispose()
+    }
+  }
+
+  async function load(input: HostInput) {
+    const cwd = process.cwd()
+    const next: Scope[] = []
 
     await Instance.provide({
-      directory: dir,
+      directory: cwd,
       fn: async () => {
         const config = await TuiConfig.get()
         const plugins = config.plugin ?? []
@@ -308,9 +441,7 @@ export namespace TuiPlugin {
         for (const item of INTERNAL_TUI_PLUGINS) {
           log.info("loading internal tui plugin", { name: item.name })
           const entry = prepInternalPlugin(item)
-          await applyPlugin(input, entry, createInit(entry.spec, entry.target, undefined, item.name)).catch((error) => {
-            fail("failed to load internal tui plugin", { name: item.name, error })
-          })
+          await applyPlugin(input, entry, createInit(entry.spec, entry.target, undefined, item.name), next)
         }
 
         const loaded = await Promise.all(plugins.map((item) => prepPlugin(config, item)))
@@ -356,11 +487,13 @@ export namespace TuiPlugin {
           // command registration order affects keybind/command precedence,
           // route registration is last-wins when ids collide,
           // and hook chains rely on stable plugin ordering.
-          await applyPlugin(input, entry, createInit(entry.spec, entry.target, hit))
+          await applyPlugin(input, entry, createInit(entry.spec, entry.target, hit), next)
         }
+
+        list = next
       },
     }).catch((error) => {
-      fail("failed to load tui plugins", { directory: dir, error })
+      fail("failed to load tui plugins", { directory: cwd, error })
     })
   }
 }

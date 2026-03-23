@@ -158,7 +158,7 @@ export type TuiState = {
 
 export type TuiApi<Node = unknown> = {
   command: {
-    register: (cb: () => TuiCommand[]) => void
+    register: (cb: () => TuiCommand[]) => () => void
     trigger: (value: string) => void
   }
   route: {
@@ -292,6 +292,13 @@ export type TuiEventBus = {
   ) => () => void
 }
 
+export type TuiDispose = () => void | Promise<void>
+
+export type TuiLifecycle = {
+  readonly signal: AbortSignal
+  onDispose: (fn: TuiDispose) => () => void
+}
+
 export type TuiPluginState = "first" | "updated" | "same"
 
 export type TuiPluginMeta = {
@@ -320,6 +327,7 @@ export type TuiPluginInput<Renderer = CliRenderer, Node = unknown> = {
   renderer: Renderer
   slots: TuiSlots
   api: TuiApi<Node>
+  lifecycle: TuiLifecycle
 }
 
 export type TuiPlugin<Renderer = CliRenderer, Node = unknown> = (

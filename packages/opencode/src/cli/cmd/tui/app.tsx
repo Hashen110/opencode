@@ -182,17 +182,21 @@ export function tui(input: {
       resolve()
     }
 
+    const onBeforeExit = async () => {
+      await TuiPlugin.dispose()
+    }
+
     const renderer = await createCliRenderer(rendererConfig(input.config))
 
     await render(() => {
       return (
         <ErrorBoundary
           fallback={(error: Error, reset: () => void) => (
-            <ErrorComponent error={error} reset={reset} onExit={onExit} mode={mode} />
+            <ErrorComponent error={error} reset={reset} onBeforeExit={onBeforeExit} onExit={onExit} mode={mode} />
           )}
         >
           <ArgsProvider {...input.args}>
-            <ExitProvider onExit={onExit}>
+            <ExitProvider onBeforeExit={onBeforeExit} onExit={onExit}>
               <KVProvider>
                 <ToastProvider>
                   <RouteProvider>

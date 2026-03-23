@@ -941,7 +941,11 @@ const tui = async (input: TuiPluginInput, options: Record<string, unknown> | nul
   const route = names(value)
   const keys = input.api.keybind.create(bind, value.keybinds)
   const fx = new VignetteEffect(value.vignette)
-  input.renderer.addPostProcessFn(fx.apply.bind(fx))
+  const post = fx.apply.bind(fx)
+  input.renderer.addPostProcessFn(post)
+  input.lifecycle.onDispose(() => {
+    input.renderer.removePostProcessFn(post)
+  })
 
   input.api.route.register([
     {

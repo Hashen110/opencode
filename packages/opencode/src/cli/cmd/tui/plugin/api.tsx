@@ -145,7 +145,7 @@ export function createTuiApi(input: Input): TuiApi<JSX.Element> {
   return {
     command: {
       register(cb) {
-        input.command.register(() => cb())
+        return input.command.register(() => cb())
       },
       trigger(value) {
         input.command.trigger(value)
