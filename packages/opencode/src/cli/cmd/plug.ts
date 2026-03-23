@@ -15,6 +15,7 @@ import { Global } from "../../global"
 import { UI } from "../ui"
 import { ConfigPaths } from "../../config/paths"
 import { Filesystem } from "../../util/filesystem"
+import { Flock } from "../../util/flock"
 import { Process } from "../../util/process"
 import { errorMessage } from "../../util/error"
 import { parsePluginSpecifier, resolvePluginTarget } from "../../plugin/shared"
@@ -206,6 +207,8 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
     const patch = async (name: "opencode" | "tui", kind: "server" | "tui") => {
       const spin = dep.spinner()
       spin.start(`Updating ${kind} config...`)
+
+      await using _ = await Flock.acquire(`plug-config:${Filesystem.resolve(path.join(dir, name))}`)
 
       const files = dep.files(dir, name)
       let cfg = files[0]
