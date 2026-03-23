@@ -1,15 +1,9 @@
 import { cmd } from "./cmd"
 import type { Argv } from "yargs"
-import { Instance } from "../../project/instance"
-import { Global } from "../../global"
-import { UI } from "../ui"
+import * as prompts from "@clack/prompts"
 import path from "path"
 import { mkdir } from "fs/promises"
-import { BunProc } from "../../bun"
-import { Filesystem } from "../../util/filesystem"
-import { ConfigPaths } from "../../config/paths"
-import { parsePluginSpecifier, uniqueModuleEntries } from "../../plugin/shared"
-import { errorMessage } from "../../util/error"
+import { pathToFileURL } from "url"
 import {
   type ParseError as JsoncParseError,
   applyEdits,
@@ -17,121 +11,15 @@ import {
   parse as parseJsonc,
   printParseErrorCode,
 } from "jsonc-parser"
-import { pathToFileURL } from "url"
-
-type Shape = {
-  server: boolean
-  tui: boolean
-}
-
-function record(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value)
-}
-
-function server(value: unknown) {
-  if (typeof value === "function") return true
-  if (!record(value)) return false
-  return typeof value.server === "function"
-}
-
-function tui(value: unknown) {
-  if (!record(value)) return false
-  return typeof value.tui === "function"
-}
-
-function shape(mod: Record<string, unknown>): Shape {
-  let out: Shape = {
-    server: false,
-    tui: false,
-  }
-
-  for (const [, entry] of uniqueModuleEntries(mod)) {
-    if (server(entry)) {
-      out = {
-        ...out,
-        server: true,
-      }
-    }
-    if (tui(entry)) {
-      out = {
-        ...out,
-        tui: true,
-      }
-    }
-  }
-
-  return out
-}
-
-function spec(value: unknown) {
-  if (typeof value === "string") return value
-  if (!Array.isArray(value)) return
-  if (typeof value[0] !== "string") return
-  return value[0]
-}
-
-function key(value: string) {
-  if (value.startsWith("file://")) return value
-  return parsePluginSpecifier(value).pkg
-}
-
-function has(list: unknown[], value: string) {
-  const want = key(value)
-  for (const item of list) {
-    const next = spec(item)
-    if (!next) continue
-    if (next === value) return true
-    if (key(next) === want) return true
-  }
-  return false
-}
-
-function parse(text: string, file: string) {
-  const errs: JsoncParseError[] = []
-  const data = parseJsonc(text, errs, { allowTrailingComma: true })
-  if (errs.length) {
-    const detail = errs.map((err) => printParseErrorCode(err.error)).join(", ")
-    throw new Error(`Failed parsing ${file}: ${detail}`)
-  }
-  if (!data) return {}
-  if (record(data)) return data
-  throw new Error(`Expected object in ${file}`)
-}
-
-async function file(dir: string, name: string) {
-  const list = ConfigPaths.fileInDirectory(dir, name)
-  for (const item of list) {
-    if (await Filesystem.exists(item)) return item
-  }
-  return list[0]
-}
-
-async function patch(file: string, value: string) {
-  const found = await Filesystem.exists(file)
-  const src = found ? await Filesystem.readText(file) : "{}"
-  const text = src.trim() ? src : "{}"
-  const data = parse(text, file)
-  const list = Array.isArray(data.plugin) ? data.plugin : []
-  if (has(list, value)) return false
-
-  const edits = modify(text, ["plugin"], [...list, value], {
-    formattingOptions: {
-      tabSize: 2,
-      insertSpaces: true,
-    },
-  })
-  const next = applyEdits(text, edits)
-  await Filesystem.write(file, next)
-  return true
-}
-
-async function load(dir: string, value: string) {
-  const pkg = parsePluginSpecifier(value).pkg
-  const target = Bun.resolveSync(pkg, dir)
-  const mod = await import(pathToFileURL(target).href)
-  if (!record(mod)) return {}
-  return mod
-}
+import { Instance } from "../../project/instance"
+import { Global } from "../../global"
+import { UI } from "../ui"
+import { BunProc } from "../../bun"
+import { ConfigPaths } from "../../config/paths"
+import { Filesystem } from "../../util/filesystem"
+import { Process } from "../../util/process"
+import { errorMessage } from "../../util/error"
+import { parsePluginSpecifier, uniqueModuleEntries } from "../../plugin/shared"
 
 export const PlugCommand = cmd({
   command: "plug <module>",
@@ -158,58 +46,178 @@ export const PlugCommand = cmd({
       return
     }
 
+    UI.empty()
+    prompts.intro(`Install plugin ${mod}`)
+
     await Instance.provide({
       directory: process.cwd(),
       fn: async () => {
+        const pkg = parsePluginSpecifier(mod).pkg
         const root = Instance.project.vcs === "git" ? Instance.worktree : Instance.directory
         const dir = args.global ? Global.Path.config : path.join(root, ".opencode")
         await mkdir(dir, { recursive: true })
 
-        const added = await BunProc.run(["add", "--exact", mod], {
-          cwd: dir,
-        })
-          .then(() => true)
-          .catch((err) => {
-            UI.error(`Failed installing ${mod}: ${errorMessage(err)}`)
-            return false
+        const install = prompts.spinner()
+        install.start("Installing module...")
+        const failed = await BunProc.run(["add", "--exact", mod], { cwd: dir })
+          .then(() => undefined)
+          .catch((err) => err)
+
+        if (failed) {
+          install.stop("Install failed", 1)
+          prompts.log.error(`Could not install "${mod}"`)
+
+          if (failed instanceof Process.RunFailedError) {
+            const lines = failed.stderr
+              .toString()
+              .split(/\r?\n/)
+              .map((line) => line.trim())
+              .filter(Boolean)
+            const errors = lines
+              .filter((line) => line.startsWith("error:"))
+              .map((line) => line.replace(/^error:\s*/, ""))
+            const detail = errors[0] ?? lines.at(-1)
+            if (detail) prompts.log.error(detail)
+
+            if (lines.some((line) => line.includes("No version matching"))) {
+              prompts.log.info("This module depends on a package version that is not available in your npm registry.")
+              prompts.log.info("Check your npm registry/auth settings and try again.")
+            }
+          }
+
+          if (!(failed instanceof Process.RunFailedError)) {
+            prompts.log.error(errorMessage(failed))
+          }
+
+          prompts.outro("Done")
+          process.exitCode = 1
+          return
+        }
+        install.stop("Module installed")
+
+        const inspect = prompts.spinner()
+        inspect.start("Inspecting plugin exports...")
+        const loaded = await (async () => {
+          const target = Bun.resolveSync(pkg, dir)
+          return import(pathToFileURL(target).href)
+        })()
+          .then((x) => x)
+          .catch((err) => err)
+
+        if (loaded instanceof Error) {
+          inspect.stop("Inspect failed", 1)
+          prompts.log.error(`Installed "${mod}" but failed to import it`)
+          prompts.log.error(errorMessage(loaded))
+          prompts.outro("Done")
+          process.exitCode = 1
+          return
+        }
+
+        let server = false
+        let tui = false
+        if (loaded && typeof loaded === "object") {
+          for (const [, entry] of uniqueModuleEntries(loaded as Record<string, unknown>)) {
+            if (typeof entry === "function") server = true
+            if (!entry || typeof entry !== "object") continue
+            if ("server" in entry && typeof entry.server === "function") server = true
+            if ("tui" in entry && typeof entry.tui === "function") tui = true
+          }
+        }
+
+        if (!server && !tui) {
+          inspect.stop("No plugin exports found", 1)
+          prompts.log.error(`"${mod}" does not export a supported plugin shape`)
+          prompts.log.info("Expected one of: default function (server), { server }, or { tui }.")
+          prompts.outro("Done")
+          process.exitCode = 1
+          return
+        }
+
+        const kinds = [server ? "server" : undefined, tui ? "tui" : undefined].filter((x): x is string => !!x)
+        inspect.stop(`Detected ${kinds.join(" + ")} plugin export${kinds.length === 1 ? "" : "s"}`)
+
+        const patch = async (name: "opencode" | "tui", kind: "server" | "tui") => {
+          const spin = prompts.spinner()
+          spin.start(`Updating ${kind} config...`)
+
+          const files = ConfigPaths.fileInDirectory(dir, name)
+          let cfg = files[0]
+          for (const file of files) {
+            if (!(await Filesystem.exists(file))) continue
+            cfg = file
+            break
+          }
+
+          const src = await Filesystem.readText(cfg).catch((err: NodeJS.ErrnoException) => {
+            if (err.code === "ENOENT") return "{}"
+            throw err
           })
-        if (!added) {
-          process.exitCode = 1
-          return
+          const text = src.trim() ? src : "{}"
+          const errs: JsoncParseError[] = []
+          const data = parseJsonc(text, errs, { allowTrailingComma: true })
+
+          if (errs.length) {
+            const err = errs[0]
+            const lines = text.substring(0, err.offset).split("\n")
+            const line = lines.length
+            const col = lines[lines.length - 1].length + 1
+            spin.stop(`Failed updating ${kind} config`, 1)
+            prompts.log.error(
+              `Invalid JSON in ${cfg} (${printParseErrorCode(err.error)} at line ${line}, column ${col})`,
+            )
+            prompts.log.info("Fix the config file and run the command again.")
+            return false
+          }
+
+          const list: unknown[] =
+            data && typeof data === "object" && !Array.isArray(data) && Array.isArray(data.plugin) ? data.plugin : []
+          const exists = list.some((item) => {
+            const spec =
+              typeof item === "string" ? item : Array.isArray(item) && typeof item[0] === "string" ? item[0] : undefined
+            if (!spec) return false
+            if (spec === mod) return true
+            if (spec.startsWith("file://")) return false
+            return parsePluginSpecifier(spec).pkg === pkg
+          })
+
+          if (exists) {
+            spin.stop(`Already configured in ${cfg}`)
+            return true
+          }
+
+          const edits = modify(text, ["plugin"], [...list, mod], {
+            formattingOptions: {
+              tabSize: 2,
+              insertSpaces: true,
+            },
+          })
+          const next = applyEdits(text, edits)
+          await Filesystem.write(cfg, next)
+          spin.stop(`Added to ${cfg}`)
+          return true
         }
 
-        const mods = await load(dir, mod).catch((err) => {
-          UI.error(`Failed importing ${mod}: ${errorMessage(err)}`)
-          return
-        })
-        if (!mods) {
-          process.exitCode = 1
-          return
+        if (server) {
+          const ok = await patch("opencode", "server")
+          if (!ok) {
+            prompts.outro("Done")
+            process.exitCode = 1
+            return
+          }
         }
 
-        const out = shape(mods)
-        if (!out.server && !out.tui) {
-          UI.error(`${mod} exports neither server nor tui plugin hooks`)
-          process.exitCode = 1
-          return
+        if (tui) {
+          const ok = await patch("tui", "tui")
+          if (!ok) {
+            prompts.outro("Done")
+            process.exitCode = 1
+            return
+          }
         }
 
-        const lines: string[] = []
-        if (out.server) {
-          const cfg = await file(dir, "opencode")
-          const wrote = await patch(cfg, mod)
-          lines.push(`${wrote ? "added" : "exists"} server plugin in ${cfg}`)
-        }
-        if (out.tui) {
-          const cfg = await file(dir, "tui")
-          const wrote = await patch(cfg, mod)
-          lines.push(`${wrote ? "added" : "exists"} tui plugin in ${cfg}`)
-        }
-
-        UI.println(`installed ${mod} in ${dir}`)
-        for (const line of lines) {
-          UI.println(line)
-        }
+        prompts.log.success(`Installed ${mod}`)
+        prompts.log.info(args.global ? `Scope: global (${dir})` : `Scope: local (${dir})`)
+        prompts.outro("Done")
       },
     })
   },
