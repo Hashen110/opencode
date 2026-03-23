@@ -43,6 +43,14 @@ function ctx(dir: string): PlugCtx {
   }
 }
 
+function ctxDir(dir: string, worktree: string): PlugCtx {
+  return {
+    vcs: "none",
+    worktree,
+    directory: dir,
+  }
+}
+
 async function plugin(dir: string, kinds?: unknown) {
   const p = path.join(dir, "plugin")
   await fs.mkdir(p, { recursive: true })
@@ -125,6 +133,46 @@ describe("cli.plug.task", () => {
     expect(json.plugin).toEqual(["acme@1.0.0"])
   })
 
+  test("does not change scoped package version without force", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["server"])
+    const cfg = path.join(tmp.path, ".opencode", "opencode.json")
+    await fs.mkdir(path.dirname(cfg), { recursive: true })
+    await Bun.write(cfg, JSON.stringify({ plugin: ["@scope/acme@1.0.0"] }, null, 2))
+
+    const run = createPlugTask(
+      {
+        mod: "@scope/acme@2.0.0",
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+    const json = await read(cfg)
+    expect(json.plugin).toEqual(["@scope/acme@1.0.0"])
+  })
+
+  test("keeps file plugin entries and still adds npm plugin", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["server"])
+    const cfg = path.join(tmp.path, ".opencode", "opencode.json")
+    await fs.mkdir(path.dirname(cfg), { recursive: true })
+    await Bun.write(cfg, JSON.stringify({ plugin: ["file:///tmp/acme.ts"] }, null, 2))
+
+    const run = createPlugTask(
+      {
+        mod: "acme@1.2.3",
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+    const json = await read(cfg)
+    expect(json.plugin).toEqual(["file:///tmp/acme.ts", "acme@1.2.3"])
+  })
+
   test("force replaces configured package version and keeps tuple options", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server"])
@@ -172,6 +220,67 @@ describe("cli.plug.task", () => {
 
     expect(await Filesystem.exists(path.join(global, "opencode.jsonc"))).toBe(true)
     expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "opencode.jsonc"))).toBe(false)
+  })
+
+  test("writes local scope under directory when vcs is not git", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["server"])
+    const directory = path.join(tmp.path, "dir")
+    const worktree = path.join(tmp.path, "worktree")
+    await fs.mkdir(directory, { recursive: true })
+    await fs.mkdir(worktree, { recursive: true })
+    const run = createPlugTask(
+      {
+        mod: "acme@1.2.3",
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctxDir(directory, worktree))
+    expect(ok).toBe(true)
+    expect(await Filesystem.exists(path.join(directory, ".opencode", "opencode.jsonc"))).toBe(true)
+    expect(await Filesystem.exists(path.join(worktree, ".opencode", "opencode.jsonc"))).toBe(false)
+  })
+
+  test("writes only tui config for tui-only plugins", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["tui"])
+    const run = createPlugTask(
+      {
+        mod: "acme@1.2.3",
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+    expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "tui.jsonc"))).toBe(true)
+    expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "opencode.jsonc"))).toBe(false)
+  })
+
+  test("force replaces version in both server and tui configs", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["server", "tui"])
+    const server = path.join(tmp.path, ".opencode", "opencode.json")
+    const tui = path.join(tmp.path, ".opencode", "tui.json")
+    await fs.mkdir(path.dirname(server), { recursive: true })
+    await Bun.write(server, JSON.stringify({ plugin: ["acme@1.0.0", "other@1.0.0"] }, null, 2))
+    await Bun.write(tui, JSON.stringify({ plugin: [["acme@1.0.0", { mode: "safe" }], "other@1.0.0"] }, null, 2))
+
+    const run = createPlugTask(
+      {
+        mod: "acme@2.0.0",
+        force: true,
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+    const serverJson = await read(server)
+    const tuiJson = await read(tui)
+    expect(serverJson.plugin).toEqual(["acme@2.0.0", "other@1.0.0"])
+    expect(tuiJson.plugin).toEqual([["acme@2.0.0", { mode: "safe" }], "other@1.0.0"])
   })
 
   test("returns false and keeps config unchanged for invalid JSONC", async () => {
