@@ -17,7 +17,7 @@ import type { useToast } from "../ui/toast"
 
 type RouteEntry = {
   key: symbol
-  render: TuiRouteDefinition<JSX.Element>["render"]
+  render: TuiRouteDefinition["render"]
 }
 
 export type RouteMap = Map<string, RouteEntry[]>
@@ -35,7 +35,7 @@ type Input = {
   toast: ReturnType<typeof useToast>
 }
 
-function routeRegister(routes: RouteMap, list: TuiRouteDefinition<JSX.Element>[], bump: () => void) {
+function routeRegister(routes: RouteMap, list: TuiRouteDefinition[], bump: () => void) {
   const key = Symbol()
   for (const item of list) {
     const prev = routes.get(item.name) ?? []
@@ -75,7 +75,7 @@ function routeNavigate(route: ReturnType<typeof useRoute>, name: string, params?
   route.navigate({ type: "plugin", id: name, data: params })
 }
 
-function routeCurrent(route: ReturnType<typeof useRoute>): TuiApi<JSX.Element>["route"]["current"] {
+function routeCurrent(route: ReturnType<typeof useRoute>): TuiApi["route"]["current"] {
   if (route.data.type === "home") return { name: "home" }
   if (route.data.type === "session") {
     return {
@@ -93,14 +93,14 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiApi<JSX.Element>["
   }
 }
 
-function mapOption<Value>(item: TuiDialogSelectOption<Value, JSX.Element>): SelectOption<Value> {
+function mapOption<Value>(item: TuiDialogSelectOption<Value>): SelectOption<Value> {
   return {
     ...item,
     onSelect: () => item.onSelect?.(),
   }
 }
 
-function pickOption<Value>(item: SelectOption<Value>): TuiDialogSelectOption<Value, JSX.Element> {
+function pickOption<Value>(item: SelectOption<Value>): TuiDialogSelectOption<Value> {
   return {
     title: item.title,
     value: item.value,
@@ -111,12 +111,12 @@ function pickOption<Value>(item: SelectOption<Value>): TuiDialogSelectOption<Val
   }
 }
 
-function mapOptionCb<Value>(cb?: (item: TuiDialogSelectOption<Value, JSX.Element>) => void) {
+function mapOptionCb<Value>(cb?: (item: TuiDialogSelectOption<Value>) => void) {
   if (!cb) return
   return (item: SelectOption<Value>) => cb(pickOption(item))
 }
 
-function stateApi(sync: ReturnType<typeof useSync>): TuiApi<JSX.Element>["state"] {
+function stateApi(sync: ReturnType<typeof useSync>): TuiApi["state"] {
   return {
     session: {
       diff(sessionID) {
@@ -141,7 +141,7 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiApi<JSX.Element>["state"
   }
 }
 
-export function createTuiApi(input: Input): TuiApi<JSX.Element> {
+export function createTuiApi(input: Input): TuiApi {
   return {
     command: {
       register(cb) {

@@ -6,6 +6,7 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2"
 import type { CliRenderer, ParsedKey, Plugin as CorePlugin } from "@opentui/core"
+import type { JSX } from "@opentui/solid"
 import type { Plugin as ServerPlugin, PluginOptions } from "./index.js"
 
 export type { CliRenderer, SlotMode } from "@opentui/core"
@@ -26,9 +27,9 @@ export type TuiRouteCurrent =
       params?: Record<string, unknown>
     }
 
-export type TuiRouteDefinition<Node = unknown> = {
+export type TuiRouteDefinition = {
   name: string
-  render: (input: { params?: Record<string, unknown> }) => Node
+  render: (input: { params?: Record<string, unknown> }) => JSX.Element
 }
 
 export type TuiCommand = {
@@ -65,14 +66,14 @@ export type TuiKeybindSet = {
   print: (name: string) => string
 }
 
-export type TuiDialogProps<Node = unknown> = {
+export type TuiDialogProps = {
   size?: "medium" | "large"
   onClose: () => void
-  children?: Node
+  children?: JSX.Element
 }
 
-export type TuiDialogStack<Node = unknown> = {
-  replace: (render: () => Node, onClose?: () => void) => void
+export type TuiDialogStack = {
+  replace: (render: () => JSX.Element, onClose?: () => void) => void
   clear: () => void
   setSize: (size: "medium" | "large") => void
   readonly size: "medium" | "large"
@@ -93,33 +94,33 @@ export type TuiDialogConfirmProps = {
   onCancel?: () => void
 }
 
-export type TuiDialogPromptProps<Node = unknown> = {
+export type TuiDialogPromptProps = {
   title: string
-  description?: () => Node
+  description?: () => JSX.Element
   placeholder?: string
   value?: string
   onConfirm?: (value: string) => void
   onCancel?: () => void
 }
 
-export type TuiDialogSelectOption<Value = unknown, Node = unknown> = {
+export type TuiDialogSelectOption<Value = unknown> = {
   title: string
   value: Value
   description?: string
-  footer?: Node | string
+  footer?: JSX.Element | string
   category?: string
   disabled?: boolean
   onSelect?: () => void
 }
 
-export type TuiDialogSelectProps<Value = unknown, Node = unknown> = {
+export type TuiDialogSelectProps<Value = unknown> = {
   title: string
   placeholder?: string
-  options: TuiDialogSelectOption<Value, Node>[]
+  options: TuiDialogSelectOption<Value>[]
   flat?: boolean
-  onMove?: (option: TuiDialogSelectOption<Value, Node>) => void
+  onMove?: (option: TuiDialogSelectOption<Value>) => void
   onFilter?: (query: string) => void
-  onSelect?: (option: TuiDialogSelectOption<Value, Node>) => void
+  onSelect?: (option: TuiDialogSelectOption<Value>) => void
   skipFilter?: boolean
   current?: Value
 }
@@ -156,24 +157,24 @@ export type TuiState = {
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
 }
 
-export type TuiApi<Node = unknown> = {
+export type TuiApi = {
   command: {
     register: (cb: () => TuiCommand[]) => () => void
     trigger: (value: string) => void
   }
   route: {
-    register: (routes: TuiRouteDefinition<Node>[]) => () => void
+    register: (routes: TuiRouteDefinition[]) => () => void
     navigate: (name: string, params?: Record<string, unknown>) => void
     readonly current: TuiRouteCurrent
   }
   ui: {
-    Dialog: (props: TuiDialogProps<Node>) => Node
-    DialogAlert: (props: TuiDialogAlertProps) => Node
-    DialogConfirm: (props: TuiDialogConfirmProps) => Node
-    DialogPrompt: (props: TuiDialogPromptProps<Node>) => Node
-    DialogSelect: <Value = unknown>(props: TuiDialogSelectProps<Value, Node>) => Node
+    Dialog: (props: TuiDialogProps) => JSX.Element
+    DialogAlert: (props: TuiDialogAlertProps) => JSX.Element
+    DialogConfirm: (props: TuiDialogConfirmProps) => JSX.Element
+    DialogPrompt: (props: TuiDialogPromptProps) => JSX.Element
+    DialogSelect: <Value = unknown>(props: TuiDialogSelectProps<Value>) => JSX.Element
     toast: (input: TuiToast) => void
-    dialog: TuiDialogStack<Node>
+    dialog: TuiDialogStack
   }
   keybind: {
     match: (key: string, evt: ParsedKey) => boolean
@@ -279,7 +280,7 @@ export type TuiSlotContext = {
   theme: TuiTheme
 }
 
-export type TuiSlotPlugin<Node = unknown> = CorePlugin<Node, TuiSlotMap, TuiSlotContext>
+export type TuiSlotPlugin = CorePlugin<JSX.Element, TuiSlotMap, TuiSlotContext>
 
 export type TuiSlots = {
   register: (plugin: TuiSlotPlugin) => () => void
@@ -320,25 +321,25 @@ export type TuiPluginMeta = TuiPluginEntry & {
   state: TuiPluginState
 }
 
-export type TuiHostPluginApi<Renderer = CliRenderer, Node = unknown> = TuiApi<Node> & {
+export type TuiHostPluginApi<Renderer = CliRenderer> = TuiApi & {
   client: ReturnType<typeof createOpencodeClientV2>
   event: TuiEventBus
   renderer: Renderer
 }
 
-export type TuiPluginApi<Renderer = CliRenderer, Node = unknown> = TuiHostPluginApi<Renderer, Node> & {
+export type TuiPluginApi<Renderer = CliRenderer> = TuiHostPluginApi<Renderer> & {
   slots: TuiSlots
   lifecycle: TuiLifecycle
 }
 
-export type TuiPlugin<Renderer = CliRenderer, Node = unknown> = (
-  api: TuiPluginApi<Renderer, Node>,
+export type TuiPlugin<Renderer = CliRenderer> = (
+  api: TuiPluginApi<Renderer>,
   options: PluginOptions | undefined,
   meta: TuiPluginMeta,
 ) => Promise<void>
 
-export type TuiPluginModule<Renderer = CliRenderer, Node = unknown> = {
+export type TuiPluginModule<Renderer = CliRenderer> = {
   server?: ServerPlugin
-  tui?: TuiPlugin<Renderer, Node>
+  tui?: TuiPlugin<Renderer>
   slots?: TuiSlotPlugin
 }

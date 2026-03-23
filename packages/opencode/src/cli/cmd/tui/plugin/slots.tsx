@@ -17,7 +17,7 @@ type SlotProps<K extends keyof TuiSlotMap> = {
 
 type Slot = <K extends keyof TuiSlotMap>(props: SlotProps<K>) => JSX.Element | null
 
-export type HostPluginApi = TuiHostPluginApi<CliRenderer, JSX.Element>
+export type HostPluginApi = TuiHostPluginApi<CliRenderer>
 
 function empty<K extends keyof TuiSlotMap>(_props: SlotProps<K>) {
   return null

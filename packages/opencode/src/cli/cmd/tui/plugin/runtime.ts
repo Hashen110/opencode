@@ -6,7 +6,6 @@ import {
   type TuiPluginMeta,
   type TuiTheme,
 } from "@opencode-ai/plugin/tui"
-import type { JSX } from "@opentui/solid"
 import type { CliRenderer } from "@opentui/core"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -37,7 +36,7 @@ type Deps = {
 }
 
 type HostPluginApi = HostApiBase & {
-  slots: TuiPluginApi<CliRenderer, JSX.Element>["slots"]
+  slots: TuiPluginApi<CliRenderer>["slots"]
 }
 
 type Scope = ReturnType<typeof scope>
@@ -74,7 +73,7 @@ function runCleanup(fn: () => unknown, ms: number): Promise<CleanupResult> {
   })
 }
 
-function isTuiPlugin(value: unknown): value is TuiPluginFn<CliRenderer, JSX.Element> {
+function isTuiPlugin(value: unknown): value is TuiPluginFn<CliRenderer> {
   return typeof value === "function"
 }
 
@@ -297,7 +296,7 @@ function scope(load: Loaded, name: string) {
   const lifecycle = {
     signal: ctrl.signal,
     onDispose,
-  } satisfies TuiPluginApi<CliRenderer, JSX.Element>["lifecycle"]
+  } satisfies TuiPluginApi<CliRenderer>["lifecycle"]
 
   const dispose = async () => {
     if (done) return
@@ -353,7 +352,7 @@ function pluginApi(api: HostPluginApi, load: Loaded, state: Scope) {
     trigger(value) {
       api.command.trigger(value)
     },
-  } satisfies TuiPluginApi<CliRenderer, JSX.Element>["command"]
+  } satisfies TuiPluginApi<CliRenderer>["command"]
 
   const route = {
     register(list) {
@@ -365,7 +364,7 @@ function pluginApi(api: HostPluginApi, load: Loaded, state: Scope) {
     get current() {
       return api.route.current
     },
-  } satisfies TuiPluginApi<CliRenderer, JSX.Element>["route"]
+  } satisfies TuiPluginApi<CliRenderer>["route"]
 
   const theme = Object.create(api.theme, {
     install: {
@@ -373,19 +372,19 @@ function pluginApi(api: HostPluginApi, load: Loaded, state: Scope) {
       configurable: true,
       enumerable: true,
     },
-  }) satisfies TuiPluginApi<CliRenderer, JSX.Element>["theme"]
+  }) satisfies TuiPluginApi<CliRenderer>["theme"]
 
   const event = {
     on(type, handler) {
       return state.wrap(api.event.on(type, handler))
     },
-  } satisfies TuiPluginApi<CliRenderer, JSX.Element>["event"]
+  } satisfies TuiPluginApi<CliRenderer>["event"]
 
   const slots = {
     register(plugin) {
       return state.wrap(api.slots.register(plugin))
     },
-  } satisfies TuiPluginApi<CliRenderer, JSX.Element>["slots"]
+  } satisfies TuiPluginApi<CliRenderer>["slots"]
 
   return {
     ...api,
@@ -395,7 +394,7 @@ function pluginApi(api: HostPluginApi, load: Loaded, state: Scope) {
     event,
     slots,
     lifecycle: state.lifecycle,
-  } satisfies TuiPluginApi<CliRenderer, JSX.Element>
+  } satisfies TuiPluginApi<CliRenderer>
 }
 
 async function applyPlugin(api: HostPluginApi, load: Loaded, meta: TuiPluginMeta, all: Scope[]) {
