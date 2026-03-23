@@ -897,7 +897,6 @@ const reg = (api: TuiApi, input: Cfg, keys: Keys) => {
     {
       title: `${input.label} host overlay`,
       value: "plugin.smoke.host",
-      keybind: keys.get("host"),
       category: "Plugin",
       slash: {
         name: "smoke-host",
