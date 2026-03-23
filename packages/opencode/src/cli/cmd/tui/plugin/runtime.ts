@@ -43,10 +43,35 @@ type HostInput = InitInput & {
 type Scope = ReturnType<typeof scope>
 
 const log = Log.create({ service: "tui.plugin" })
+const DISPOSE_TIMEOUT_MS = 5000
 
 function fail(message: string, data: Record<string, unknown>) {
   log.error(message, data)
   console.error(`[tui.plugin] ${message}`, data)
+}
+
+type CleanupResult = { type: "ok" } | { type: "error"; error: unknown } | { type: "timeout" }
+
+function runCleanup(fn: () => unknown, ms: number): Promise<CleanupResult> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      resolve({ type: "timeout" })
+    }, ms)
+
+    Promise.resolve()
+      .then(fn)
+      .then(
+        () => {
+          resolve({ type: "ok" })
+        },
+        (error) => {
+          resolve({ type: "error", error })
+        },
+      )
+      .finally(() => {
+        clearTimeout(timer)
+      })
+  })
 }
 
 function isTuiPlugin(value: unknown): value is TuiPluginFn<CliRenderer, JSX.Element> {
@@ -282,14 +307,36 @@ function scope(load: Loaded, name: string) {
     ctrl.abort()
     const queue = [...list].reverse()
     list = []
+    const until = Date.now() + DISPOSE_TIMEOUT_MS
     for (const item of queue) {
-      await Promise.resolve(item.fn()).catch((error) => {
+      const left = until - Date.now()
+      if (left <= 0) {
+        fail("timed out cleaning up tui plugin", {
+          path: load.spec,
+          name,
+          timeout: DISPOSE_TIMEOUT_MS,
+        })
+        break
+      }
+
+      const out = await runCleanup(item.fn, left)
+      if (out.type === "ok") continue
+      if (out.type === "timeout") {
+        fail("timed out cleaning up tui plugin", {
+          path: load.spec,
+          name,
+          timeout: DISPOSE_TIMEOUT_MS,
+        })
+        break
+      }
+
+      if (out.type === "error") {
         fail("failed to clean up tui plugin", {
           path: load.spec,
           name,
-          error,
+          error: out.error,
         })
-      })
+      }
     }
   }
 
@@ -406,8 +453,13 @@ export namespace TuiPlugin {
 
   export async function init(input: InitInput) {
     const cwd = process.cwd()
-    if (loaded && dir === cwd) return loaded
-    if (loaded) await dispose()
+    if (loaded) {
+      if (dir !== cwd) {
+        throw new Error(`TuiPlugin.init() called with a different working directory. expected=${dir} got=${cwd}`)
+      }
+      return loaded
+    }
+
     dir = cwd
     loaded = load({
       ...input,
@@ -418,10 +470,11 @@ export namespace TuiPlugin {
 
   export async function dispose() {
     const task = loaded
+    loaded = undefined
+    dir = ""
     if (task) await task
     const queue = [...list].reverse()
     list = []
-    loaded = undefined
     for (const state of queue) {
       await state.dispose()
     }

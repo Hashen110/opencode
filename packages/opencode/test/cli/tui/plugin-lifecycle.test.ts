@@ -328,3 +328,73 @@ test("rolls back failed plugin exports and continues loading", async () => {
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }
 })
+
+test(
+  "times out hanging plugin cleanup on dispose",
+  async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const pluginPath = path.join(dir, "timeout-plugin.ts")
+        const pluginSpec = pathToFileURL(pluginPath).href
+
+        await Bun.write(
+          pluginPath,
+          `export default {
+  tui: async (input) => {
+    input.lifecycle.onDispose(() => new Promise(() => {}))
+  },
+}
+`,
+        )
+
+        return {
+          pluginSpec,
+        }
+      },
+    })
+
+    const count: Count = {
+      event_add: 0,
+      event_drop: 0,
+      route_add: 0,
+      route_drop: 0,
+      command_add: 0,
+      command_drop: 0,
+    }
+    process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+    const name = path.parse(new URL(tmp.extra.pluginSpec).pathname).name
+    const get = spyOn(TuiConfig, "get").mockResolvedValue({
+      plugin: [tmp.extra.pluginSpec],
+      plugin_meta: {
+        [name]: {
+          scope: "local",
+          source: path.join(tmp.path, "tui.json"),
+        },
+      },
+    })
+    const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+    const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+    try {
+      await TuiPlugin.init(input(count))
+
+      const done = await new Promise<string>((resolve) => {
+        const timer = setTimeout(() => {
+          resolve("timeout")
+        }, 7000)
+        TuiPlugin.dispose().then(() => {
+          clearTimeout(timer)
+          resolve("done")
+        })
+      })
+      expect(done).toBe("done")
+    } finally {
+      await TuiPlugin.dispose()
+      cwd.mockRestore()
+      get.mockRestore()
+      wait.mockRestore()
+      delete process.env.OPENCODE_PLUGIN_META_FILE
+    }
+  },
+  { timeout: 15000 },
+)

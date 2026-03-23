@@ -217,6 +217,7 @@ test("continues loading tui plugins when a plugin is missing config metadata", a
     await expect(fs.readFile(tmp.extra.nextMarker, "utf8")).resolves.toBe("called")
     await expect(fs.readFile(tmp.extra.plainMarker, "utf8")).resolves.toBe("undefined")
   } finally {
+    await TuiPlugin.dispose()
     cwd.mockRestore()
     get.mockRestore()
     wait.mockRestore()

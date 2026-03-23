@@ -482,6 +482,7 @@ export const object_plugin = {
       global_theme: tmp.extra.globalThemeName,
     } satisfies Data
   } finally {
+    await TuiPlugin.dispose()
     cwd.mockRestore()
     wait.mockRestore()
     install.mockRestore()
