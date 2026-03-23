@@ -37,6 +37,11 @@ type Deps = {
 
 const log = Log.create({ service: "tui.plugin" })
 
+function fail(message: string, data: Record<string, unknown>) {
+  log.error(message, data)
+  console.error(`[tui.plugin] ${message}`, data)
+}
+
 function isTuiPlugin(value: unknown): value is TuiPluginFn<CliRenderer, JSX.Element> {
   return typeof value === "function"
 }
@@ -145,7 +150,7 @@ async function prepPlugin(config: TuiConfig.Info, item: Config.PluginSpec, retry
   if (isDeprecatedPlugin(spec)) return
   log.info("loading tui plugin", { path: spec, retry })
   const target = await resolvePluginTarget(spec).catch((error) => {
-    log.error("failed to resolve tui plugin", { path: spec, retry, error })
+    fail("failed to resolve tui plugin", { path: spec, retry, error })
     return
   })
   if (!target) return
@@ -163,7 +168,7 @@ async function prepPlugin(config: TuiConfig.Info, item: Config.PluginSpec, retry
 
   const install = makeInstallFn(pluginMeta, root, spec)
   const mod = await import(target).catch((error) => {
-    log.error("failed to load tui plugin", { path: spec, retry, error })
+    fail("failed to load tui plugin", { path: spec, retry, error })
     return
   })
   if (!mod) return
@@ -304,7 +309,7 @@ export namespace TuiPlugin {
           log.info("loading internal tui plugin", { name: item.name })
           const entry = prepInternalPlugin(item)
           await applyPlugin(input, entry, createInit(entry.spec, entry.target, undefined, item.name)).catch((error) => {
-            log.error("failed to load internal tui plugin", { name: item.name, error })
+            fail("failed to load internal tui plugin", { name: item.name, error })
           })
         }
 
@@ -355,7 +360,7 @@ export namespace TuiPlugin {
         }
       },
     }).catch((error) => {
-      log.error("failed to load tui plugins", { directory: dir, error })
+      fail("failed to load tui plugins", { directory: dir, error })
     })
   }
 }
