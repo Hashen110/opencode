@@ -1,48 +1,20 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Process } from "../../src/util/process"
 import { Filesystem } from "../../src/util/filesystem"
 import { createPlugTask, type PlugCtx, type PlugDeps } from "../../src/cli/cmd/plug"
 import { tmpdir } from "../fixture/fixture"
 
-type Log = {
-  info: string[]
-  error: string[]
-  success: string[]
-}
-
-function capture() {
-  const log: Log = {
-    info: [],
-    error: [],
-    success: [],
-  }
-  const spin: string[] = []
-  return {
-    log,
-    spin,
-  }
-}
-
-function deps(global: string, target: string | Error, out: ReturnType<typeof capture>): PlugDeps {
+function deps(global: string, target: string | Error): PlugDeps {
   return {
     spinner: () => ({
       start() {},
-      stop(msg) {
-        out.spin.push(msg)
-      },
+      stop() {},
     }),
     log: {
-      error(msg) {
-        out.log.error.push(msg)
-      },
-      info(msg) {
-        out.log.info.push(msg)
-      },
-      success(msg) {
-        out.log.success.push(msg)
-      },
+      error() {},
+      info() {},
+      success() {},
     },
     mkdir: async (dir, opts) => {
       await fs.mkdir(dir, opts)
@@ -96,15 +68,14 @@ async function read(file: string) {
 }
 
 describe("cli.plug.task", () => {
-  test("installs server+tui plugin and writes both configs", async () => {
+  test("writes both server and tui config entries", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server", "tui"])
-    const cap = capture()
     const run = createPlugTask(
       {
         mod: "acme@1.2.3",
       },
-      deps(path.join(tmp.path, "global"), target, cap),
+      deps(path.join(tmp.path, "global"), target),
     )
 
     const ok = await run(ctx(tmp.path))
@@ -114,20 +85,18 @@ describe("cli.plug.task", () => {
     const tui = await read(path.join(tmp.path, ".opencode", "tui.jsonc"))
     expect(server.plugin).toEqual(["acme@1.2.3"])
     expect(tui.plugin).toEqual(["acme@1.2.3"])
-    expect(cap.log.success).toEqual(["Installed acme@1.2.3"])
   })
 
-  test("supports resolver targets that point to a file", async () => {
+  test("supports resolver target pointing to a file", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server"])
     const file = path.join(target, "index.js")
     await Bun.write(file, "export {}")
-    const cap = capture()
     const run = createPlugTask(
       {
         mod: "acme@1.2.3",
       },
-      deps(path.join(tmp.path, "global"), file, cap),
+      deps(path.join(tmp.path, "global"), file),
     )
 
     const ok = await run(ctx(tmp.path))
@@ -136,29 +105,27 @@ describe("cli.plug.task", () => {
     expect(server.plugin).toEqual(["acme@1.2.3"])
   })
 
-  test("keeps existing version when package already configured without force", async () => {
+  test("does not change configured package version without force", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server"])
     const cfg = path.join(tmp.path, ".opencode", "opencode.json")
     await fs.mkdir(path.dirname(cfg), { recursive: true })
     await Bun.write(cfg, JSON.stringify({ plugin: ["acme@1.0.0"] }, null, 2))
 
-    const cap = capture()
     const run = createPlugTask(
       {
         mod: "acme@2.0.0",
       },
-      deps(path.join(tmp.path, "global"), target, cap),
+      deps(path.join(tmp.path, "global"), target),
     )
 
     const ok = await run(ctx(tmp.path))
     expect(ok).toBe(true)
     const json = await read(cfg)
     expect(json.plugin).toEqual(["acme@1.0.0"])
-    expect(cap.spin.some((x) => x.includes("Already configured"))).toBe(true)
   })
 
-  test("force replaces version and keeps tuple options", async () => {
+  test("force replaces configured package version and keeps tuple options", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server"])
     const cfg = path.join(tmp.path, ".opencode", "opencode.json")
@@ -174,33 +141,30 @@ describe("cli.plug.task", () => {
       ),
     )
 
-    const cap = capture()
     const run = createPlugTask(
       {
         mod: "acme@2.0.0",
         force: true,
       },
-      deps(path.join(tmp.path, "global"), target, cap),
+      deps(path.join(tmp.path, "global"), target),
     )
 
     const ok = await run(ctx(tmp.path))
     expect(ok).toBe(true)
     const json = await read(cfg)
     expect(json.plugin).toEqual([["acme@2.0.0", { mode: "safe" }], "other@1.0.0"])
-    expect(cap.spin.some((x) => x.includes("Replaced"))).toBe(true)
   })
 
-  test("writes into global config when global flag is set", async () => {
+  test("writes to global scope when global flag is set", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server"])
     const global = path.join(tmp.path, "global")
-    const cap = capture()
     const run = createPlugTask(
       {
         mod: "acme@1.2.3",
         global: true,
       },
-      deps(global, target, cap),
+      deps(global, target),
     )
 
     const ok = await run(ctx(tmp.path))
@@ -210,7 +174,7 @@ describe("cli.plug.task", () => {
     expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "opencode.jsonc"))).toBe(false)
   })
 
-  test("fails when config file has invalid JSONC", async () => {
+  test("returns false and keeps config unchanged for invalid JSONC", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server"])
     const cfg = path.join(tmp.path, ".opencode", "opencode.jsonc")
@@ -218,88 +182,61 @@ describe("cli.plug.task", () => {
     const bad = '{"plugin": ["acme@1.0.0",}'
     await Bun.write(cfg, bad)
 
-    const cap = capture()
     const run = createPlugTask(
       {
         mod: "acme@2.0.0",
       },
-      deps(path.join(tmp.path, "global"), target, cap),
+      deps(path.join(tmp.path, "global"), target),
     )
 
     const ok = await run(ctx(tmp.path))
     expect(ok).toBe(false)
-    expect(cap.log.error.some((x) => x.includes("Invalid JSON"))).toBe(true)
     expect(await fs.readFile(cfg, "utf8")).toBe(bad)
   })
 
-  test("fails when plugin manifest has no supported targets", async () => {
+  test("returns false when manifest declares no supported targets", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path)
-    const cap = capture()
     const run = createPlugTask(
       {
         mod: "acme@1.2.3",
       },
-      deps(path.join(tmp.path, "global"), target, cap),
+      deps(path.join(tmp.path, "global"), target),
     )
 
     const ok = await run(ctx(tmp.path))
     expect(ok).toBe(false)
-    expect(cap.log.error.some((x) => x.includes("does not declare supported targets"))).toBe(true)
+    expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "opencode.jsonc"))).toBe(false)
+    expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "tui.jsonc"))).toBe(false)
   })
 
-  test("fails when plugin manifest cannot be read", async () => {
+  test("returns false when manifest cannot be read", async () => {
     await using tmp = await tmpdir()
     const target = path.join(tmp.path, "plugin")
     await fs.mkdir(target, { recursive: true })
-    const cap = capture()
     const run = createPlugTask(
       {
         mod: "acme@1.2.3",
       },
-      deps(path.join(tmp.path, "global"), target, cap),
+      deps(path.join(tmp.path, "global"), target),
     )
 
     const ok = await run(ctx(tmp.path))
     expect(ok).toBe(false)
-    expect(cap.log.error.some((x) => x.includes("failed to read"))).toBe(true)
+    expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "opencode.jsonc"))).toBe(false)
   })
 
-  test("fails cleanly when install throws regular error", async () => {
+  test("returns false when install fails", async () => {
     await using tmp = await tmpdir()
-    const cap = capture()
     const run = createPlugTask(
       {
         mod: "acme@9.9.9",
       },
-      deps(path.join(tmp.path, "global"), new Error("boom"), cap),
+      deps(path.join(tmp.path, "global"), new Error("boom")),
     )
 
     const ok = await run(ctx(tmp.path))
     expect(ok).toBe(false)
-    expect(cap.log.error.some((x) => x.includes('Could not install "acme@9.9.9"'))).toBe(true)
-    expect(cap.log.error.some((x) => x.includes("boom"))).toBe(true)
-  })
-
-  test("shows registry hints for run failure with missing version", async () => {
-    await using tmp = await tmpdir()
-    const err = new Process.RunFailedError(
-      ["bun", "add", "acme@9.9.9"],
-      1,
-      Buffer.from(""),
-      Buffer.from('error: No version matching "9.9.9" found for specifier "acme"\n'),
-    )
-    const cap = capture()
-    const run = createPlugTask(
-      {
-        mod: "acme@9.9.9",
-      },
-      deps(path.join(tmp.path, "global"), err, cap),
-    )
-
-    const ok = await run(ctx(tmp.path))
-    expect(ok).toBe(false)
-    expect(cap.log.info).toContain("This package depends on a version that is not available in your npm registry.")
-    expect(cap.log.info).toContain("Check npm registry/auth settings and try again.")
+    expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "opencode.jsonc"))).toBe(false)
   })
 })

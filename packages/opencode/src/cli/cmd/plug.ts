@@ -21,14 +21,14 @@ import { parsePluginSpecifier, resolvePluginTarget } from "../../plugin/shared"
 
 type Mode = "noop" | "add" | "replace"
 
-export function pluginSpec(item: unknown) {
+function pluginSpec(item: unknown) {
   if (typeof item === "string") return item
   if (!Array.isArray(item)) return
   if (typeof item[0] !== "string") return
   return item[0]
 }
 
-export function patchPluginList(list: unknown[], mod: string, force = false): { mode: Mode; list: unknown[] } {
+function patchPluginList(list: unknown[], mod: string, force = false): { mode: Mode; list: unknown[] } {
   const pkg = parsePluginSpecifier(mod).pkg
   const rows = list.map((item, i) => ({
     item,
