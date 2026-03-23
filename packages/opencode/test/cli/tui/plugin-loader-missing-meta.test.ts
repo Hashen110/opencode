@@ -8,24 +8,13 @@ import { tmpdir } from "../../fixture/fixture"
 import { TuiConfig } from "../../../src/config/tui"
 import { createPluginKeybind } from "../../../src/cli/cmd/tui/context/plugin-keybinds"
 
-mock.module("@opentui/solid/preload", () => ({}))
-mock.module("@opentui/solid", () => ({
-  createSolidSlotRegistry: () => ({
-    register: () => () => {},
-  }),
-  createSlot: () => () => null,
-  useRenderer: () => ({
-    getPalette: async () => ({ palette: [] as string[] }),
-    clearPaletteCache: () => {},
-  }),
-}))
 mock.module("@opentui/solid/jsx-runtime", () => ({
   Fragment: Symbol.for("Fragment"),
   jsx: () => null,
   jsxs: () => null,
   jsxDEV: () => null,
 }))
-const { TuiPlugin } = await import("../../../src/cli/cmd/tui/plugin")
+const { TuiPlugin } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
 test("continues loading tui plugins when a plugin is missing config metadata", async () => {
   await using tmp = await tmpdir({

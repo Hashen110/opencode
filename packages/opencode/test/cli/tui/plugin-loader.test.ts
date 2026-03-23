@@ -10,17 +10,6 @@ import { TuiConfig } from "../../../src/config/tui"
 import { Config } from "../../../src/config/config"
 import { createPluginKeybind } from "../../../src/cli/cmd/tui/context/plugin-keybinds"
 
-mock.module("@opentui/solid/preload", () => ({}))
-mock.module("@opentui/solid", () => ({
-  createSolidSlotRegistry: () => ({
-    register: () => () => {},
-  }),
-  createSlot: () => () => null,
-  useRenderer: () => ({
-    getPalette: async () => ({ palette: [] as string[] }),
-    clearPaletteCache: () => {},
-  }),
-}))
 mock.module("@opentui/solid/jsx-runtime", () => ({
   Fragment: Symbol.for("Fragment"),
   jsx: () => null,
@@ -28,7 +17,7 @@ mock.module("@opentui/solid/jsx-runtime", () => ({
   jsxDEV: () => null,
 }))
 const { allThemes, addTheme } = await import("../../../src/cli/cmd/tui/context/theme")
-const { TuiPlugin } = await import("../../../src/cli/cmd/tui/plugin")
+const { TuiPlugin } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
 type Row = Record<string, unknown>
 
