@@ -1,4 +1,4 @@
-import { expect, mock, spyOn, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -8,12 +8,6 @@ import { tmpdir } from "../../fixture/fixture"
 import { TuiConfig } from "../../../src/config/tui"
 import { createPluginKeybind } from "../../../src/cli/cmd/tui/context/plugin-keybinds"
 
-mock.module("@opentui/solid/jsx-runtime", () => ({
-  Fragment: Symbol.for("Fragment"),
-  jsx: () => null,
-  jsxs: () => null,
-  jsxDEV: () => null,
-}))
 const { TuiPlugin } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
 test("continues loading tui plugins when a plugin is missing config metadata", async () => {

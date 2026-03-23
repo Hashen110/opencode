@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, mock, spyOn, test } from "bun:test"
+import { beforeAll, describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -10,12 +10,6 @@ import { TuiConfig } from "../../../src/config/tui"
 import { Config } from "../../../src/config/config"
 import { createPluginKeybind } from "../../../src/cli/cmd/tui/context/plugin-keybinds"
 
-mock.module("@opentui/solid/jsx-runtime", () => ({
-  Fragment: Symbol.for("Fragment"),
-  jsx: () => null,
-  jsxs: () => null,
-  jsxDEV: () => null,
-}))
 const { allThemes, addTheme } = await import("../../../src/cli/cmd/tui/context/theme")
 const { TuiPlugin } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 

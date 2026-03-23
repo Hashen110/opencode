@@ -1,14 +1,8 @@
-import { expect, mock, test } from "bun:test"
+import { expect, test } from "bun:test"
 
-mock.module("@opentui/solid/jsx-runtime", () => ({
-  Fragment: Symbol.for("Fragment"),
-  jsx: () => null,
-  jsxs: () => null,
-  jsxDEV: () => null,
-}))
-
-const { DEFAULT_THEMES, allThemes, addTheme, hasTheme, resolveTheme } =
-  await import("../../../src/cli/cmd/tui/context/theme")
+const { DEFAULT_THEMES, allThemes, addTheme, hasTheme, resolveTheme } = await import(
+  "../../../src/cli/cmd/tui/context/theme"
+)
 
 test("addTheme writes into module theme store", () => {
   const name = `plugin-theme-${Date.now()}`
