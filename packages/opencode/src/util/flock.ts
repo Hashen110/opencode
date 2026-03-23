@@ -93,6 +93,14 @@ export namespace Flock {
     return Math.max(0, ms + d)
   }
 
+  function mono() {
+    return performance.now()
+  }
+
+  function wall() {
+    return performance.timeOrigin + mono()
+  }
+
   async function stats(file: string) {
     try {
       return await stat(file)
@@ -105,7 +113,7 @@ export namespace Flock {
 
   async function stale(lockDir: string, heartbeatPath: string, metaPath: string, staleMs: number) {
     // Stale detection allows automatic recovery after crashed owners.
-    const now = Date.now()
+    const now = wall()
     const heartbeat = await stats(heartbeatPath)
     if (heartbeat) {
       return now - heartbeat.mtimeMs > staleMs
@@ -147,7 +155,7 @@ export namespace Flock {
         const errCode = code(claimErr)
         if (errCode === "EEXIST") {
           const breaker = await stats(breakerPath)
-          if (breaker && Date.now() - breaker.mtimeMs > opts.staleMs) {
+          if (breaker && wall() - breaker.mtimeMs > opts.staleMs) {
             await rm(breakerPath, { recursive: true, force: true }).catch(() => undefined)
           }
           return { acquired: false }
@@ -249,7 +257,7 @@ export namespace Flock {
     input: { key: string; onWait?: Wait; signal?: AbortSignal },
     opts: Opts,
   ) {
-    const deadline = Date.now() + opts.timeoutMs
+    const stop = mono() + opts.timeoutMs
     let attempt = 0
     let waited = 0
     let delay = opts.baseDelayMs
@@ -262,7 +270,7 @@ export namespace Flock {
         return res
       }
 
-      if (Date.now() > deadline) {
+      if (mono() > stop) {
         throw new Error(`Timed out waiting for lock: ${input.key}`)
       }
 
