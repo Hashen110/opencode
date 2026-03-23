@@ -321,12 +321,11 @@ export type TuiPluginInit = {
   entry: TuiPluginMeta
 }
 
-export type TuiPluginInput<Renderer = CliRenderer, Node = unknown> = {
+export type TuiPluginInput<Renderer = CliRenderer, Node = unknown> = TuiApi<Node> & {
   client: ReturnType<typeof createOpencodeClientV2>
   event: TuiEventBus
   renderer: Renderer
   slots: TuiSlots
-  api: TuiApi<Node>
   lifecycle: TuiLifecycle
 }
 

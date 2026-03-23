@@ -85,35 +85,35 @@ async function load() {
 export const object_plugin = {
   tui: async (input, options) => {
     if (!options?.marker) return
-    const key = input.api.keybind.create(
+    const key = input.keybind.create(
       { modal: "ctrl+shift+m", screen: "ctrl+shift+o", close: "escape" },
       options.keybinds,
     )
-    const kv_before = input.api.kv.get(options.kv_key, "missing")
-    input.api.kv.set(options.kv_key, "stored")
-    const kv_after = input.api.kv.get(options.kv_key, "missing")
-    const diff = input.api.state.session.diff(options.session_id)
-    const todo = input.api.state.session.todo(options.session_id)
-    const lsp = input.api.state.lsp()
-    const mcp = input.api.state.mcp()
-    const depth_before = input.api.ui.dialog.depth
-    const open_before = input.api.ui.dialog.open
-    const size_before = input.api.ui.dialog.size
-    input.api.ui.dialog.setSize("large")
-    const size_after = input.api.ui.dialog.size
-    input.api.ui.dialog.replace(() => null)
-    const depth_after = input.api.ui.dialog.depth
-    const open_after = input.api.ui.dialog.open
-    input.api.ui.dialog.clear()
-    const open_clear = input.api.ui.dialog.open
-    const before = input.api.theme.has(options.theme_name)
-    const set_missing = input.api.theme.set(options.theme_name)
-    await input.api.theme.install(options.theme_path)
-    const after = input.api.theme.has(options.theme_name)
-    const set_installed = input.api.theme.set(options.theme_name)
+    const kv_before = input.kv.get(options.kv_key, "missing")
+    input.kv.set(options.kv_key, "stored")
+    const kv_after = input.kv.get(options.kv_key, "missing")
+    const diff = input.state.session.diff(options.session_id)
+    const todo = input.state.session.todo(options.session_id)
+    const lsp = input.state.lsp()
+    const mcp = input.state.mcp()
+    const depth_before = input.ui.dialog.depth
+    const open_before = input.ui.dialog.open
+    const size_before = input.ui.dialog.size
+    input.ui.dialog.setSize("large")
+    const size_after = input.ui.dialog.size
+    input.ui.dialog.replace(() => null)
+    const depth_after = input.ui.dialog.depth
+    const open_after = input.ui.dialog.open
+    input.ui.dialog.clear()
+    const open_clear = input.ui.dialog.open
+    const before = input.theme.has(options.theme_name)
+    const set_missing = input.theme.set(options.theme_name)
+    await input.theme.install(options.theme_path)
+    const after = input.theme.has(options.theme_name)
+    const set_installed = input.theme.set(options.theme_name)
     const first = await Bun.file(options.dest).text()
     await Bun.write(options.source, JSON.stringify({ theme: { primary: "#fefefe" } }, null, 2))
-    await input.api.theme.install(options.theme_path)
+    await input.theme.install(options.theme_path)
     const second = await Bun.file(options.dest).text()
     await Bun.write(
       options.marker,
@@ -122,7 +122,7 @@ export const object_plugin = {
         set_missing,
         after,
         set_installed,
-        selected: input.api.theme.selected,
+        selected: input.theme.selected,
         same: first === second,
         key_modal: key.get("modal"),
         key_close: key.get("close"),
@@ -130,7 +130,7 @@ export const object_plugin = {
         key_print: key.print("modal"),
         kv_before,
         kv_after,
-        kv_ready: input.api.kv.ready,
+        kv_ready: input.kv.ready,
         diff_count: diff.length,
         diff_file: diff[0]?.file,
         todo_count: todo.length,
@@ -157,11 +157,11 @@ export const object_plugin = {
         `export default {
   tui: async (input, options) => {
     if (!options?.marker) return
-    const before = input.api.theme.has(options.theme_name)
-    const set_missing = input.api.theme.set(options.theme_name)
-    await input.api.theme.install(options.theme_path)
-    const after = input.api.theme.has(options.theme_name)
-    const set_installed = input.api.theme.set(options.theme_name)
+    const before = input.theme.has(options.theme_name)
+    const set_missing = input.theme.set(options.theme_name)
+    await input.theme.install(options.theme_path)
+    const after = input.theme.has(options.theme_name)
+    const set_installed = input.theme.set(options.theme_name)
     await Bun.write(
       options.marker,
       JSON.stringify({
@@ -181,9 +181,9 @@ export const object_plugin = {
         `export default {
   tui: async (input, options) => {
     if (!options?.marker) return
-    const before = input.api.theme.has(options.theme_name)
-    await input.api.theme.install(options.theme_path)
-    const after = input.api.theme.has(options.theme_name)
+    const before = input.theme.has(options.theme_name)
+    await input.theme.install(options.theme_path)
+    const after = input.theme.has(options.theme_name)
     const text = await Bun.file(options.dest).text()
     await Bun.write(
       options.marker,
@@ -203,15 +203,15 @@ export const object_plugin = {
         `export default {
   tui: async (input, options) => {
     if (!options?.marker) return
-    await input.api.theme.install(options.theme_path)
-    const has = input.api.theme.has(options.theme_name)
-    const set_installed = input.api.theme.set(options.theme_name)
+    await input.theme.install(options.theme_path)
+    const has = input.theme.has(options.theme_name)
+    const set_installed = input.theme.set(options.theme_name)
     await Bun.write(
       options.marker,
       JSON.stringify({
         has,
         set_installed,
-        selected: input.api.theme.selected,
+        selected: input.theme.selected,
       }),
     )
   },
@@ -344,106 +344,104 @@ export const object_plugin = {
         on: () => () => {},
       },
       renderer,
-      api: {
-        command: {
-          register: () => () => {},
-          trigger: () => {},
+      command: {
+        register: () => () => {},
+        trigger: () => {},
+      },
+      route: {
+        register: () => () => {},
+        navigate: () => {},
+        get current() {
+          return { name: "home" as const }
         },
-        route: {
-          register: () => () => {},
-          navigate: () => {},
-          get current() {
-            return { name: "home" as const }
+      },
+      ui: {
+        Dialog: () => null,
+        DialogAlert: () => null,
+        DialogConfirm: () => null,
+        DialogPrompt: () => null,
+        DialogSelect: () => null,
+        toast: () => {},
+        dialog: {
+          replace: () => {
+            depth = 1
           },
-        },
-        ui: {
-          Dialog: () => null,
-          DialogAlert: () => null,
-          DialogConfirm: () => null,
-          DialogPrompt: () => null,
-          DialogSelect: () => null,
-          toast: () => {},
-          dialog: {
-            replace: () => {
-              depth = 1
-            },
-            clear: () => {
-              depth = 0
-              size = "medium"
-            },
-            setSize: (next) => {
-              size = next
-            },
-            get size() {
-              return size
-            },
-            get depth() {
-              return depth
-            },
-            get open() {
-              return depth > 0
-            },
+          clear: () => {
+            depth = 0
+            size = "medium"
+          },
+          setSize: (next) => {
+            size = next
+          },
+          get size() {
+            return size
+          },
+          get depth() {
+            return depth
+          },
+          get open() {
+            return depth > 0
           },
         },
-        keybind: {
-          ...keybind,
-          create(defaults, overrides) {
-            return createPluginKeybind(keybind, defaults, overrides)
+      },
+      keybind: {
+        ...keybind,
+        create(defaults, overrides) {
+          return createPluginKeybind(keybind, defaults, overrides)
+        },
+      },
+      kv: {
+        get(key, fallback) {
+          return (kv[key] ?? fallback) as never
+        },
+        set(key, value) {
+          kv[key] = value
+        },
+        get ready() {
+          return true
+        },
+      },
+      state: {
+        session: {
+          diff(sessionID) {
+            if (sessionID !== "ses_test") return []
+            return [{ file: "src/app.ts", additions: 3, deletions: 1 }]
+          },
+          todo(sessionID) {
+            if (sessionID !== "ses_test") return []
+            return [{ content: "ship it", status: "pending" }]
           },
         },
-        kv: {
-          get(key, fallback) {
-            return (kv[key] ?? fallback) as never
-          },
-          set(key, value) {
-            kv[key] = value
-          },
-          get ready() {
-            return true
-          },
+        lsp() {
+          return [{ id: "ts", root: "/tmp/project", status: "connected" }]
         },
-        state: {
-          session: {
-            diff(sessionID) {
-              if (sessionID !== "ses_test") return []
-              return [{ file: "src/app.ts", additions: 3, deletions: 1 }]
-            },
-            todo(sessionID) {
-              if (sessionID !== "ses_test") return []
-              return [{ content: "ship it", status: "pending" }]
-            },
-          },
-          lsp() {
-            return [{ id: "ts", root: "/tmp/project", status: "connected" }]
-          },
-          mcp() {
-            return [{ name: "github", status: "connected" }]
-          },
+        mcp() {
+          return [{ name: "github", status: "connected" }]
         },
-        theme: {
-          get current() {
-            return {}
-          },
-          get selected() {
-            return selected
-          },
-          has(name) {
-            return allThemes()[name] !== undefined
-          },
-          set(name) {
-            if (!allThemes()[name]) return false
-            selected = name
-            return true
-          },
-          async install() {
-            throw new Error("base theme.install should not run")
-          },
-          mode() {
-            return "dark" as const
-          },
-          get ready() {
-            return true
-          },
+      },
+      theme: {
+        get current() {
+          return {}
+        },
+        get selected() {
+          return selected
+        },
+        has(name) {
+          return allThemes()[name] !== undefined
+        },
+        set(name) {
+          if (!allThemes()[name]) return false
+          selected = name
+          return true
+        },
+        async install() {
+          throw new Error("base theme.install should not run")
+        },
+        mode() {
+          return "dark" as const
+        },
+        get ready() {
+          return true
         },
       },
     })

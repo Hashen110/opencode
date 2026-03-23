@@ -934,12 +934,12 @@ const reg = (api: TuiApi, input: Cfg, keys: Keys) => {
 const tui = async (input: TuiPluginInput, options: Record<string, unknown> | null, meta: TuiPluginInit) => {
   if (options?.enabled === false) return
 
-  await input.api.theme.install("./smoke-theme.json")
-  input.api.theme.set("smoke-theme")
+  await input.theme.install("./smoke-theme.json")
+  input.theme.set("smoke-theme")
 
   const value = cfg(options ?? undefined)
   const route = names(value)
-  const keys = input.api.keybind.create(bind, value.keybinds)
+  const keys = input.keybind.create(bind, value.keybinds)
   const fx = new VignetteEffect(value.vignette)
   const post = fx.apply.bind(fx)
   input.renderer.addPostProcessFn(post)
@@ -947,20 +947,20 @@ const tui = async (input: TuiPluginInput, options: Record<string, unknown> | nul
     input.renderer.removePostProcessFn(post)
   })
 
-  input.api.route.register([
+  input.route.register([
     {
       name: route.screen,
       render: ({ params }) => (
-        <Screen api={input.api} input={value} route={route} keys={keys} meta={meta} params={params} />
+        <Screen api={input} input={value} route={route} keys={keys} meta={meta} params={params} />
       ),
     },
     {
       name: route.modal,
-      render: ({ params }) => <Modal api={input.api} input={value} route={route} keys={keys} params={params} />,
+      render: ({ params }) => <Modal api={input} input={value} route={route} keys={keys} params={params} />,
     },
   ])
 
-  reg(input.api, value, keys)
+  reg(input, value, keys)
   input.slots.register(slot(value))
 }
 

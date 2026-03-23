@@ -282,7 +282,7 @@ function App() {
     client: sdk.client,
     event: sdk.event,
     renderer,
-    api,
+    ...api,
   })
     .catch((error) => {
       console.error("Failed to load TUI plugins", error)

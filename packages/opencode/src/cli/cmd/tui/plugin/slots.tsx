@@ -45,7 +45,7 @@ export function setupSlots(input: InitInput): TuiSlots {
   const reg = createSolidSlotRegistry<TuiSlotMap, TuiSlotContext>(
     input.renderer,
     {
-      theme: input.api.theme,
+      theme: input.theme,
     },
     {
       onPluginError(event) {

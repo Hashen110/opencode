@@ -40,110 +40,108 @@ function input(count: Count) {
         return this
       },
     } satisfies CliRenderer,
-    api: {
-      command: {
-        register: () => {
-          count.command_add += 1
-          return () => {
-            count.command_drop += 1
-          }
-        },
-        trigger: () => {},
+    command: {
+      register: () => {
+        count.command_add += 1
+        return () => {
+          count.command_drop += 1
+        }
       },
-      route: {
-        register: () => {
-          count.route_add += 1
-          return () => {
-            count.route_drop += 1
-          }
-        },
-        navigate: () => {},
-        get current() {
-          return { name: "home" as const }
-        },
+      trigger: () => {},
+    },
+    route: {
+      register: () => {
+        count.route_add += 1
+        return () => {
+          count.route_drop += 1
+        }
       },
-      ui: {
-        Dialog: () => null,
-        DialogAlert: () => null,
-        DialogConfirm: () => null,
-        DialogPrompt: () => null,
-        DialogSelect: () => null,
-        toast: () => {},
-        dialog: {
-          replace: () => {},
-          clear: () => {},
-          setSize: () => {},
-          get size() {
-            return "medium" as const
-          },
-          get depth() {
-            return 0
-          },
-          get open() {
-            return false
-          },
-        },
+      navigate: () => {},
+      get current() {
+        return { name: "home" as const }
       },
-      keybind: {
-        match: () => false,
-        print: (key: string) => key,
-        create(defaults: Record<string, string>) {
-          return {
-            all: defaults,
-            get: (name: string) => defaults[name] ?? name,
-            match: () => false,
-            print: (name: string) => defaults[name] ?? name,
-          }
+    },
+    ui: {
+      Dialog: () => null,
+      DialogAlert: () => null,
+      DialogConfirm: () => null,
+      DialogPrompt: () => null,
+      DialogSelect: () => null,
+      toast: () => {},
+      dialog: {
+        replace: () => {},
+        clear: () => {},
+        setSize: () => {},
+        get size() {
+          return "medium" as const
         },
-      },
-      kv: {
-        get(key: string, fallback: unknown) {
-          return (kv[key] ?? fallback) as never
+        get depth() {
+          return 0
         },
-        set(key: string, value: unknown) {
-          kv[key] = value
-        },
-        get ready() {
-          return true
-        },
-      },
-      state: {
-        session: {
-          diff() {
-            return []
-          },
-          todo() {
-            return []
-          },
-        },
-        lsp() {
-          return []
-        },
-        mcp() {
-          return []
-        },
-      },
-      theme: {
-        get current() {
-          return {}
-        },
-        get selected() {
-          return selected
-        },
-        has() {
+        get open() {
           return false
         },
-        set(name: string) {
-          selected = name
-          return true
+      },
+    },
+    keybind: {
+      match: () => false,
+      print: (key: string) => key,
+      create(defaults: Record<string, string>) {
+        return {
+          all: defaults,
+          get: (name: string) => defaults[name] ?? name,
+          match: () => false,
+          print: (name: string) => defaults[name] ?? name,
+        }
+      },
+    },
+    kv: {
+      get(key: string, fallback: unknown) {
+        return (kv[key] ?? fallback) as never
+      },
+      set(key: string, value: unknown) {
+        kv[key] = value
+      },
+      get ready() {
+        return true
+      },
+    },
+    state: {
+      session: {
+        diff() {
+          return []
         },
-        async install() {},
-        mode() {
-          return "dark" as const
+        todo() {
+          return []
         },
-        get ready() {
-          return true
-        },
+      },
+      lsp() {
+        return []
+      },
+      mcp() {
+        return []
+      },
+    },
+    theme: {
+      get current() {
+        return {}
+      },
+      get selected() {
+        return selected
+      },
+      has() {
+        return false
+      },
+      set(name: string) {
+        selected = name
+        return true
+      },
+      async install() {},
+      mode() {
+        return "dark" as const
+      },
+      get ready() {
+        return true
       },
     },
   }
@@ -161,8 +159,8 @@ test("disposes tracked event, route, and command hooks", async () => {
         `export default {
   tui: async (input, options) => {
     input.event.on("event.test", () => {})
-    input.api.route.register([{ name: "lifecycle.route", render: () => null }])
-    const off = input.api.command.register(() => [])
+    input.route.register([{ name: "lifecycle.route", render: () => null }])
+    const off = input.command.register(() => [])
     off()
     input.lifecycle.onDispose(async () => {
       const prev = await Bun.file(options.marker).text().catch(() => "")
@@ -254,7 +252,7 @@ test("rolls back failed plugin exports and continues loading", async () => {
         badPath,
         `export default {
   tui: async (input, options) => {
-    input.api.route.register([{ name: "bad.route", render: () => null }])
+    input.route.register([{ name: "bad.route", render: () => null }])
     input.lifecycle.onDispose(async () => {
       await Bun.write(options.bad_marker, "cleaned")
     })

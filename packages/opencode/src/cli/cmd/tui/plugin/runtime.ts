@@ -348,38 +348,34 @@ function scope(load: Loaded, name: string) {
 }
 
 function pluginInput(input: HostInput, load: Loaded, state: Scope) {
-  const api = {
-    command: {
-      register(cb) {
-        return state.wrap(input.api.command.register(cb))
-      },
-      trigger(value) {
-        input.api.command.trigger(value)
-      },
+  const command = {
+    register(cb) {
+      return state.wrap(input.command.register(cb))
     },
-    route: {
-      register(list) {
-        return state.wrap(input.api.route.register(list))
-      },
-      navigate(name, params) {
-        input.api.route.navigate(name, params)
-      },
-      get current() {
-        return input.api.route.current
-      },
+    trigger(value) {
+      input.command.trigger(value)
     },
-    ui: input.api.ui,
-    keybind: input.api.keybind,
-    theme: Object.create(input.api.theme, {
-      install: {
-        value: load.install,
-        configurable: true,
-        enumerable: true,
-      },
-    }),
-    kv: input.api.kv,
-    state: input.api.state,
-  } satisfies TuiPluginInput<CliRenderer, JSX.Element>["api"]
+  } satisfies TuiPluginInput<CliRenderer, JSX.Element>["command"]
+
+  const route = {
+    register(list) {
+      return state.wrap(input.route.register(list))
+    },
+    navigate(name, params) {
+      input.route.navigate(name, params)
+    },
+    get current() {
+      return input.route.current
+    },
+  } satisfies TuiPluginInput<CliRenderer, JSX.Element>["route"]
+
+  const theme = Object.create(input.theme, {
+    install: {
+      value: load.install,
+      configurable: true,
+      enumerable: true,
+    },
+  }) satisfies TuiPluginInput<CliRenderer, JSX.Element>["theme"]
 
   const event = {
     on(type, handler) {
@@ -395,9 +391,11 @@ function pluginInput(input: HostInput, load: Loaded, state: Scope) {
 
   return {
     ...input,
+    command,
+    route,
+    theme,
     event,
     slots,
-    api,
     lifecycle: state.lifecycle,
   } satisfies TuiPluginInput<CliRenderer, JSX.Element>
 }

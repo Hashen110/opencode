@@ -119,96 +119,94 @@ test("continues loading tui plugins when a plugin is missing config metadata", a
         on: () => () => {},
       },
       renderer,
-      api: {
-        command: {
-          register: () => () => {},
-          trigger: () => {},
+      command: {
+        register: () => () => {},
+        trigger: () => {},
+      },
+      route: {
+        register: () => () => {},
+        navigate: () => {},
+        get current() {
+          return { name: "home" as const }
         },
-        route: {
-          register: () => () => {},
-          navigate: () => {},
-          get current() {
-            return { name: "home" as const }
+      },
+      ui: {
+        Dialog: () => null,
+        DialogAlert: () => null,
+        DialogConfirm: () => null,
+        DialogPrompt: () => null,
+        DialogSelect: () => null,
+        toast: () => {},
+        dialog: {
+          replace: () => {},
+          clear: () => {},
+          setSize: () => {},
+          get size() {
+            return "medium" as const
           },
-        },
-        ui: {
-          Dialog: () => null,
-          DialogAlert: () => null,
-          DialogConfirm: () => null,
-          DialogPrompt: () => null,
-          DialogSelect: () => null,
-          toast: () => {},
-          dialog: {
-            replace: () => {},
-            clear: () => {},
-            setSize: () => {},
-            get size() {
-              return "medium" as const
-            },
-            get depth() {
-              return 0
-            },
-            get open() {
-              return false
-            },
+          get depth() {
+            return 0
           },
-        },
-        keybind: {
-          ...keybind,
-          create(defaults, overrides) {
-            return createPluginKeybind(keybind, defaults, overrides)
-          },
-        },
-        kv: {
-          get(key, fallback) {
-            return (kv[key] ?? fallback) as never
-          },
-          set(key, value) {
-            kv[key] = value
-          },
-          get ready() {
-            return true
-          },
-        },
-        state: {
-          session: {
-            diff() {
-              return []
-            },
-            todo() {
-              return []
-            },
-          },
-          lsp() {
-            return []
-          },
-          mcp() {
-            return []
-          },
-        },
-        theme: {
-          get current() {
-            return {}
-          },
-          get selected() {
-            return selected
-          },
-          has() {
+          get open() {
             return false
           },
-          set(name) {
-            selected = name
-            return true
+        },
+      },
+      keybind: {
+        ...keybind,
+        create(defaults, overrides) {
+          return createPluginKeybind(keybind, defaults, overrides)
+        },
+      },
+      kv: {
+        get(key, fallback) {
+          return (kv[key] ?? fallback) as never
+        },
+        set(key, value) {
+          kv[key] = value
+        },
+        get ready() {
+          return true
+        },
+      },
+      state: {
+        session: {
+          diff() {
+            return []
           },
-          async install() {
-            throw new Error("base theme.install should not run")
+          todo() {
+            return []
           },
-          mode() {
-            return "dark" as const
-          },
-          get ready() {
-            return true
-          },
+        },
+        lsp() {
+          return []
+        },
+        mcp() {
+          return []
+        },
+      },
+      theme: {
+        get current() {
+          return {}
+        },
+        get selected() {
+          return selected
+        },
+        has() {
+          return false
+        },
+        set(name) {
+          selected = name
+          return true
+        },
+        async install() {
+          throw new Error("base theme.install should not run")
+        },
+        mode() {
+          return "dark" as const
+        },
+        get ready() {
+          return true
         },
       },
     })
