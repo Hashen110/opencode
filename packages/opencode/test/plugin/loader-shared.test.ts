@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -22,7 +22,6 @@ afterAll(() => {
 })
 
 afterEach(async () => {
-  mock.restore()
   await Instance.disposeAll()
 })
 
@@ -135,10 +134,14 @@ describe("plugin.loader.shared", () => {
 
     const install = spyOn(BunProc, "install").mockImplementation(async () => pathToFileURL(tmp.extra.file).href)
 
-    await load(tmp.path)
+    try {
+      await load(tmp.path)
 
-    expect(install.mock.calls).toContainEqual(["acme-plugin", "latest"])
-    expect(install.mock.calls).toContainEqual(["scope-plugin", "2.3.4"])
+      expect(install.mock.calls).toContainEqual(["acme-plugin", "latest"])
+      expect(install.mock.calls).toContainEqual(["scope-plugin", "2.3.4"])
+    } finally {
+      install.mockRestore()
+    }
   })
 
   test("skips legacy codex and copilot auth plugin specs", async () => {
@@ -159,12 +162,16 @@ describe("plugin.loader.shared", () => {
 
     const install = spyOn(BunProc, "install").mockResolvedValue("")
 
-    await load(tmp.path)
+    try {
+      await load(tmp.path)
 
-    const pkgs = install.mock.calls.map((call) => call[0])
-    expect(pkgs).toContain("regular-plugin")
-    expect(pkgs).not.toContain("opencode-openai-codex-auth")
-    expect(pkgs).not.toContain("opencode-copilot-auth")
+      const pkgs = install.mock.calls.map((call) => call[0])
+      expect(pkgs).toContain("regular-plugin")
+      expect(pkgs).not.toContain("opencode-openai-codex-auth")
+      expect(pkgs).not.toContain("opencode-copilot-auth")
+    } finally {
+      install.mockRestore()
+    }
   })
 
   test("publishes session.error when install fails", async () => {
@@ -174,13 +181,17 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    spyOn(BunProc, "install").mockRejectedValue(new Error("boom"))
+    const install = spyOn(BunProc, "install").mockRejectedValue(new Error("boom"))
 
-    const errors = await errs(tmp.path)
+    try {
+      const errors = await errs(tmp.path)
 
-    expect(errors.some((x) => x.includes("Failed to install plugin broken-plugin@9.9.9") && x.includes("boom"))).toBe(
-      true,
-    )
+      expect(errors.some((x) => x.includes("Failed to install plugin broken-plugin@9.9.9") && x.includes("boom"))).toBe(
+        true,
+      )
+    } finally {
+      install.mockRestore()
+    }
   })
 
   test("publishes session.error when plugin init throws", async () => {
