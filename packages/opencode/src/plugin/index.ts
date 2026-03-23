@@ -13,6 +13,7 @@ import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
+import { errorMessage } from "@/util/error"
 import { isDeprecatedPlugin, parsePluginSpecifier, resolvePluginTarget, uniqueModuleEntries } from "./shared"
 
 export namespace Plugin {
@@ -67,7 +68,7 @@ export namespace Plugin {
     const parsed = parsePluginSpecifier(spec)
     const target = await resolvePluginTarget(spec, parsed).catch((err) => {
       const cause = err instanceof Error ? err.cause : err
-      const detail = cause instanceof Error ? cause.message : String(cause ?? err)
+      const detail = errorMessage(cause ?? err)
       log.error("failed to install plugin", { pkg: parsed.pkg, version: parsed.version, error: detail })
       Bus.publish(Session.Event.Error, {
         error: new NamedError.Unknown({
@@ -88,7 +89,7 @@ export namespace Plugin {
     if (!target) return
 
     const mod = await import(target).catch((err) => {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = errorMessage(err)
       log.error("failed to load plugin", { path: spec, error: message })
       Bus.publish(Session.Event.Error, {
         error: new NamedError.Unknown({
@@ -165,7 +166,7 @@ export namespace Plugin {
               // Keep plugin execution sequential so hook registration and execution
               // order remains deterministic across plugin runs.
               await applyPlugin(load, input, hooks).catch((err) => {
-                const message = err instanceof Error ? err.message : String(err)
+                const message = errorMessage(err)
                 log.error("failed to load plugin", { path: load.spec, error: message })
                 Bus.publish(Session.Event.Error, {
                   error: new NamedError.Unknown({

@@ -13,6 +13,7 @@ import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { TuiConfig } from "@/config/tui"
 import { Log } from "@/util/log"
+import { errorData, errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { Instance } from "@/project/instance"
 import { isDeprecatedPlugin, resolvePluginTarget, uniqueModuleEntries } from "@/plugin/shared"
@@ -45,8 +46,16 @@ const log = Log.create({ service: "tui.plugin" })
 const DISPOSE_TIMEOUT_MS = 5000
 
 function fail(message: string, data: Record<string, unknown>) {
-  log.error(message, data)
-  console.error(`[tui.plugin] ${message}`, data)
+  if (!("error" in data)) {
+    log.error(message, data)
+    console.error(`[tui.plugin] ${message}`, data)
+    return
+  }
+
+  const text = `${message}: ${errorMessage(data.error)}`
+  const next = { ...data, error: errorData(data.error) }
+  log.error(text, next)
+  console.error(`[tui.plugin] ${text}`, next)
 }
 
 type CleanupResult = { type: "ok" } | { type: "error"; error: unknown } | { type: "timeout" }
@@ -199,7 +208,7 @@ async function prepPlugin(config: TuiConfig.Info, item: Config.PluginSpec, retry
 
   const install = makeInstallFn(pluginMeta, root, spec)
   const mod = await import(target).catch((error) => {
-    fail("failed to load tui plugin", { path: spec, retry, error })
+    fail("failed to load tui plugin", { path: spec, target, retry, error })
     return
   })
   if (!mod) return
