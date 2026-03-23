@@ -3,7 +3,6 @@ import type { Argv } from "yargs"
 import * as prompts from "@clack/prompts"
 import path from "path"
 import { mkdir } from "fs/promises"
-import { pathToFileURL } from "url"
 import {
   type ParseError as JsoncParseError,
   applyEdits,
@@ -14,12 +13,11 @@ import {
 import { Instance } from "../../project/instance"
 import { Global } from "../../global"
 import { UI } from "../ui"
-import { BunProc } from "../../bun"
 import { ConfigPaths } from "../../config/paths"
 import { Filesystem } from "../../util/filesystem"
 import { Process } from "../../util/process"
 import { errorMessage } from "../../util/error"
-import { parsePluginSpecifier, uniqueModuleEntries } from "../../plugin/shared"
+import { parsePluginSpecifier, resolvePluginTarget } from "../../plugin/shared"
 
 export const PlugCommand = cmd({
   command: "plug <module>",
@@ -58,17 +56,13 @@ export const PlugCommand = cmd({
         await mkdir(dir, { recursive: true })
 
         const install = prompts.spinner()
-        install.start("Installing module...")
-        const failed = await BunProc.run(["add", "--exact", mod], { cwd: dir })
-          .then(() => undefined)
-          .catch((err) => err)
-
-        if (failed) {
+        install.start("Installing plugin package...")
+        const target = await resolvePluginTarget(mod).catch((err) => err)
+        if (target instanceof Error) {
           install.stop("Install failed", 1)
           prompts.log.error(`Could not install "${mod}"`)
-
-          if (failed instanceof Process.RunFailedError) {
-            const lines = failed.stderr
+          if (target instanceof Process.RunFailedError) {
+            const lines = target.stderr
               .toString()
               .split(/\r?\n/)
               .map((line) => line.trim())
@@ -78,63 +72,46 @@ export const PlugCommand = cmd({
               .map((line) => line.replace(/^error:\s*/, ""))
             const detail = errors[0] ?? lines.at(-1)
             if (detail) prompts.log.error(detail)
-
             if (lines.some((line) => line.includes("No version matching"))) {
-              prompts.log.info("This module depends on a package version that is not available in your npm registry.")
-              prompts.log.info("Check your npm registry/auth settings and try again.")
+              prompts.log.info("This package depends on a version that is not available in your npm registry.")
+              prompts.log.info("Check npm registry/auth settings and try again.")
             }
+          } else {
+            prompts.log.error(errorMessage(target))
           }
-
-          if (!(failed instanceof Process.RunFailedError)) {
-            prompts.log.error(errorMessage(failed))
-          }
-
           prompts.outro("Done")
           process.exitCode = 1
           return
         }
-        install.stop("Module installed")
+        install.stop("Plugin package ready")
 
         const inspect = prompts.spinner()
-        inspect.start("Inspecting plugin exports...")
-        const loaded = await (async () => {
-          const target = Bun.resolveSync(pkg, dir)
-          return import(pathToFileURL(target).href)
-        })()
-          .then((x) => x)
-          .catch((err) => err)
-
-        if (loaded instanceof Error) {
-          inspect.stop("Inspect failed", 1)
-          prompts.log.error(`Installed "${mod}" but failed to import it`)
-          prompts.log.error(errorMessage(loaded))
+        inspect.start("Reading plugin manifest...")
+        const stat = Filesystem.stat(target)
+        const base = stat?.isDirectory() ? target : path.dirname(target)
+        const file = path.join(base, "package.json")
+        const json = await Filesystem.readJson<Record<string, unknown>>(file).catch((err) => err)
+        if (json instanceof Error) {
+          inspect.stop("Manifest read failed", 1)
+          prompts.log.error(`Installed "${mod}" but failed to read ${file}`)
+          prompts.log.error(errorMessage(json))
           prompts.outro("Done")
           process.exitCode = 1
           return
         }
 
-        let server = false
-        let tui = false
-        if (loaded && typeof loaded === "object") {
-          for (const [, entry] of uniqueModuleEntries(loaded as Record<string, unknown>)) {
-            if (typeof entry === "function") server = true
-            if (!entry || typeof entry !== "object") continue
-            if ("server" in entry && typeof entry.server === "function") server = true
-            if ("tui" in entry && typeof entry.tui === "function") tui = true
-          }
-        }
+        const raw = json["oc-plugin"]
+        const kinds = Array.isArray(raw) ? raw.filter((x): x is "server" | "tui" => x === "server" || x === "tui") : []
 
-        if (!server && !tui) {
-          inspect.stop("No plugin exports found", 1)
-          prompts.log.error(`"${mod}" does not export a supported plugin shape`)
-          prompts.log.info("Expected one of: default function (server), { server }, or { tui }.")
+        if (!kinds.length) {
+          inspect.stop("No plugin targets found", 1)
+          prompts.log.error(`"${mod}" does not declare supported targets in package.json`)
+          prompts.log.info('Expected: "oc-plugin": ["server", "tui"] (or either one).')
           prompts.outro("Done")
           process.exitCode = 1
           return
         }
-
-        const kinds = [server ? "server" : undefined, tui ? "tui" : undefined].filter((x): x is string => !!x)
-        inspect.stop(`Detected ${kinds.join(" + ")} plugin export${kinds.length === 1 ? "" : "s"}`)
+        inspect.stop(`Detected ${kinds.join(" + ")} target${kinds.length === 1 ? "" : "s"}`)
 
         const patch = async (name: "opencode" | "tui", kind: "server" | "tui") => {
           const spin = prompts.spinner()
@@ -155,7 +132,6 @@ export const PlugCommand = cmd({
           const text = src.trim() ? src : "{}"
           const errs: JsoncParseError[] = []
           const data = parseJsonc(text, errs, { allowTrailingComma: true })
-
           if (errs.length) {
             const err = errs[0]
             const lines = text.substring(0, err.offset).split("\n")
@@ -191,13 +167,12 @@ export const PlugCommand = cmd({
               insertSpaces: true,
             },
           })
-          const next = applyEdits(text, edits)
-          await Filesystem.write(cfg, next)
+          await Filesystem.write(cfg, applyEdits(text, edits))
           spin.stop(`Added to ${cfg}`)
           return true
         }
 
-        if (server) {
+        if (kinds.includes("server")) {
           const ok = await patch("opencode", "server")
           if (!ok) {
             prompts.outro("Done")
@@ -206,7 +181,7 @@ export const PlugCommand = cmd({
           }
         }
 
-        if (tui) {
+        if (kinds.includes("tui")) {
           const ok = await patch("tui", "tui")
           if (!ok) {
             prompts.outro("Done")
