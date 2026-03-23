@@ -35,6 +35,12 @@ export const PlugCommand = cmd({
         default: false,
         describe: "install in global config",
       })
+      .option("force", {
+        alias: ["f"],
+        type: "boolean",
+        default: false,
+        describe: "replace existing plugin version",
+      })
   },
   handler: async (args) => {
     const mod = String(args.module ?? "").trim()
@@ -147,17 +153,59 @@ export const PlugCommand = cmd({
 
           const list: unknown[] =
             data && typeof data === "object" && !Array.isArray(data) && Array.isArray(data.plugin) ? data.plugin : []
-          const exists = list.some((item) => {
-            const spec =
-              typeof item === "string" ? item : Array.isArray(item) && typeof item[0] === "string" ? item[0] : undefined
-            if (!spec) return false
-            if (spec === mod) return true
-            if (spec.startsWith("file://")) return false
-            return parsePluginSpecifier(spec).pkg === pkg
+          const spec = (item: unknown) => {
+            if (typeof item === "string") return item
+            if (!Array.isArray(item)) return
+            if (typeof item[0] !== "string") return
+            return item[0]
+          }
+          const rows = list.map((item, i) => ({
+            item,
+            i,
+            spec: spec(item),
+          }))
+          const dup = rows.filter((item) => {
+            if (!item.spec) return false
+            if (item.spec === mod) return true
+            if (item.spec.startsWith("file://")) return false
+            return parsePluginSpecifier(item.spec).pkg === pkg
           })
 
-          if (exists) {
+          if (dup.length && !args.force) {
             spin.stop(`Already configured in ${cfg}`)
+            return true
+          }
+
+          if (dup.length) {
+            const keep = dup[0]
+            if (!keep) {
+              spin.stop(`Already configured in ${cfg}`)
+              return true
+            }
+            if (dup.length === 1 && keep.spec === mod) {
+              spin.stop(`Already configured in ${cfg}`)
+              return true
+            }
+
+            const idx = new Set(dup.map((item) => item.i))
+            const next = rows.flatMap((item) => {
+              if (!idx.has(item.i)) return [item.item]
+              if (item.i !== keep.i) return []
+              if (typeof item.item === "string") return [mod]
+              if (Array.isArray(item.item) && typeof item.item[0] === "string") {
+                return [[mod, ...item.item.slice(1)]]
+              }
+              return [item.item]
+            })
+
+            const edits = modify(text, ["plugin"], next, {
+              formattingOptions: {
+                tabSize: 2,
+                insertSpaces: true,
+              },
+            })
+            await Filesystem.write(cfg, applyEdits(text, edits))
+            spin.stop(`Replaced in ${cfg}`)
             return true
           }
 
