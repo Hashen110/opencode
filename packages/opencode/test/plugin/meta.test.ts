@@ -4,8 +4,18 @@ import path from "path"
 import { pathToFileURL } from "url"
 
 import { tmpdir } from "../fixture/fixture"
+import { Process } from "../../src/util/process"
 
 const { PluginMeta } = await import("../../src/plugin/meta")
+const root = path.join(import.meta.dir, "../..")
+const worker = path.join(import.meta.dir, "../fixture/plugin-meta-worker.ts")
+
+function run(input: { file: string; spec: string; target: string }) {
+  return Process.run([process.execPath, worker, JSON.stringify(input)], {
+    cwd: root,
+    nothrow: true,
+  })
+}
 
 afterEach(() => {
   delete process.env.OPENCODE_PLUGIN_META_FILE
@@ -43,9 +53,6 @@ describe("plugin.meta", () => {
     expect(three.entry.load_count).toBe(3)
     expect((three.entry.modified ?? 0) > (one.entry.modified ?? 0)).toBe(true)
 
-    await expect(fs.readFile(file, "utf8")).rejects.toThrow()
-    await PluginMeta.persist()
-
     const all = await PluginMeta.list()
     expect(Object.values(all).some((item) => item.spec === spec && item.source === "file")).toBe(true)
     const saved = JSON.parse(await fs.readFile(file, "utf8")) as Record<string, { spec: string; load_count: number }>
@@ -78,11 +85,45 @@ describe("plugin.meta", () => {
     expect(two.state).toBe("updated")
     expect(two.entry.version).toBe("1.1.0")
     expect(two.entry.load_count).toBe(2)
-    await PluginMeta.persist()
 
     const all = await PluginMeta.list()
     expect(Object.values(all).some((item) => item.name === "acme-plugin" && item.version === "1.1.0")).toBe(true)
     const saved = JSON.parse(await fs.readFile(file, "utf8")) as Record<string, { name: string; version?: string }>
     expect(Object.values(saved).some((item) => item.name === "acme-plugin" && item.version === "1.1.0")).toBe(true)
   })
+
+  test("serializes concurrent metadata updates across processes", async () => {
+    await using tmp = await tmpdir<{ file: string }>({
+      init: async (dir) => {
+        const file = path.join(dir, "plugin.ts")
+        await Bun.write(file, "export default async () => ({})\n")
+        return { file }
+      },
+    })
+
+    process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "state", "plugin-meta.json")
+    const file = process.env.OPENCODE_PLUGIN_META_FILE!
+    const spec = pathToFileURL(tmp.extra.file).href
+    const n = 12
+
+    const out = await Promise.all(
+      Array.from({ length: n }, () =>
+        run({
+          file,
+          spec,
+          target: spec,
+        }),
+      ),
+    )
+
+    expect(out.map((item) => item.code)).toEqual(Array.from({ length: n }, () => 0))
+    expect(out.map((item) => item.stderr.toString()).filter(Boolean)).toEqual([])
+
+    const all = await PluginMeta.list()
+    const hit = Object.values(all).find((item) => item.spec === spec)
+    expect(hit?.load_count).toBe(n)
+
+    const saved = JSON.parse(await fs.readFile(file, "utf8")) as Record<string, { spec: string; load_count: number }>
+    expect(Object.values(saved).find((item) => item.spec === spec)?.load_count).toBe(n)
+  }, 20_000)
 })

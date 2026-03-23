@@ -4,6 +4,7 @@ import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { Flock } from "@/util/flock"
 
 import { parsePluginSpecifier } from "./shared"
 
@@ -27,18 +28,24 @@ export namespace PluginMeta {
 
   export type State = "first" | "updated" | "same"
 
+  export type Touch = {
+    spec: string
+    target: string
+  }
+
   type Store = Record<string, Entry>
   type Core = Omit<Entry, "first_time" | "last_time" | "time_changed" | "load_count" | "fingerprint">
-
-  const cache = {
-    ready: false,
-    path: "",
-    store: {} as Store,
-    dirty: false,
+  type Row = Touch & {
+    id: string
+    core: Core
   }
 
   function storePath() {
     return Flag.OPENCODE_PLUGIN_META_FILE ?? path.join(Global.Path.state, "plugin-meta.json")
+  }
+
+  function lock(file: string) {
+    return `plugin-meta:${file}`
   }
 
   function sourceKind(spec: string): Source {
@@ -111,21 +118,19 @@ export namespace PluginMeta {
     return [value.target, value.requested ?? "", value.version ?? ""].join("|")
   }
 
-  async function load() {
-    const next = storePath()
-    if (cache.ready && cache.path === next) return
-    cache.path = next
-    cache.store = await Filesystem.readJson<Store>(next).catch(() => ({}) as Store)
-    cache.dirty = false
-    cache.ready = true
+  async function read(file: string): Promise<Store> {
+    return Filesystem.readJson<Store>(file).catch(() => ({}) as Store)
   }
 
-  export async function touch(spec: string, target: string): Promise<{ state: State; entry: Entry }> {
-    await load()
-    const now = Date.now()
-    const id = entryKey(spec)
-    const prev = cache.store[id]
-    const core = await entryCore(spec, target)
+  async function row(item: Touch): Promise<Row> {
+    return {
+      ...item,
+      id: entryKey(item.spec),
+      core: await entryCore(item.spec, item.target),
+    }
+  }
+
+  function next(prev: Entry | undefined, core: Core, now: number): { state: State; entry: Entry } {
     const entry: Entry = {
       ...core,
       first_time: prev?.first_time ?? now,
@@ -134,27 +139,43 @@ export namespace PluginMeta {
       load_count: (prev?.load_count ?? 0) + 1,
       fingerprint: fingerprint(core),
     }
-
     const state: State = !prev ? "first" : prev.fingerprint === entry.fingerprint ? "same" : "updated"
     if (state === "updated") entry.time_changed = now
-
-    cache.store[id] = entry
-    cache.dirty = true
     return {
       state,
       entry,
     }
   }
 
-  export async function persist() {
-    await load()
-    if (!cache.dirty) return
-    await Filesystem.writeJson(cache.path, cache.store)
-    cache.dirty = false
+  export async function touchMany(items: Touch[]): Promise<Array<{ state: State; entry: Entry }>> {
+    if (!items.length) return []
+    const file = storePath()
+    const rows = await Promise.all(items.map((item) => row(item)))
+
+    return Flock.withLock(lock(file), async () => {
+      const store = await read(file)
+      const now = Date.now()
+      const out: Array<{ state: State; entry: Entry }> = []
+      for (const item of rows) {
+        const hit = next(store[item.id], item.core, now)
+        store[item.id] = hit.entry
+        out.push(hit)
+      }
+      await Filesystem.writeJson(file, store)
+      return out
+    })
+  }
+
+  export async function touch(spec: string, target: string): Promise<{ state: State; entry: Entry }> {
+    return touchMany([{ spec, target }]).then((item) => {
+      const hit = item[0]
+      if (hit) return hit
+      throw new Error("Failed to touch plugin metadata.")
+    })
   }
 
   export async function list(): Promise<Store> {
-    await load()
-    return { ...cache.store }
+    const file = storePath()
+    return Flock.withLock(lock(file), async () => read(file))
   }
 }

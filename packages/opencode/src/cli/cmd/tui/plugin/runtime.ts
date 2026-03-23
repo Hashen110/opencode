@@ -300,56 +300,58 @@ export namespace TuiPlugin {
         const plugins = config.plugin ?? []
         const deps: Deps = {}
 
-        try {
-          for (const item of INTERNAL_TUI_PLUGINS) {
-            log.info("loading internal tui plugin", { name: item.name })
-            const entry = prepInternalPlugin(item)
-            await applyPlugin(input, entry, createInit(entry.spec, entry.target, undefined, item.name)).catch(
-              (error) => {
-                log.error("failed to load internal tui plugin", { name: item.name, error })
-              },
-            )
-          }
-
-          const loaded = await Promise.all(plugins.map((item) => prepPlugin(config, item)))
-
-          for (let i = 0; i < plugins.length; i++) {
-            let entry = loaded[i]
-            if (!entry) {
-              const item = plugins[i]
-              if (!item) continue
-              const spec = Config.pluginSpecifier(item)
-              if (!spec.startsWith("file://")) continue
-              await waitDeps(deps)
-              entry = await prepPlugin(config, item, true)
-            }
-            if (!entry) continue
-
-            const meta = await PluginMeta.touch(entry.spec, entry.target).catch((error) => {
-              log.warn("failed to track tui plugin", { path: entry.spec, retry: entry.retry, error })
-              return undefined
-            })
-            if (meta && meta.state !== "same") {
-              log.info("tui plugin metadata updated", {
-                path: entry.spec,
-                retry: entry.retry,
-                state: meta.state,
-                source: meta.entry.source,
-                version: meta.entry.version,
-                modified: meta.entry.modified,
-              })
-            }
-
-            // Keep plugin execution sequential for deterministic side effects:
-            // command registration order affects keybind/command precedence,
-            // route registration is last-wins when ids collide,
-            // and hook chains rely on stable plugin ordering.
-            await applyPlugin(input, entry, createInit(entry.spec, entry.target, meta))
-          }
-        } finally {
-          await PluginMeta.persist().catch((error) => {
-            log.warn("failed to persist tui plugin metadata", { error })
+        for (const item of INTERNAL_TUI_PLUGINS) {
+          log.info("loading internal tui plugin", { name: item.name })
+          const entry = prepInternalPlugin(item)
+          await applyPlugin(input, entry, createInit(entry.spec, entry.target, undefined, item.name)).catch((error) => {
+            log.error("failed to load internal tui plugin", { name: item.name, error })
           })
+        }
+
+        const loaded = await Promise.all(plugins.map((item) => prepPlugin(config, item)))
+        const ready: Loaded[] = []
+
+        for (let i = 0; i < plugins.length; i++) {
+          let entry = loaded[i]
+          if (!entry) {
+            const item = plugins[i]
+            if (!item) continue
+            const spec = Config.pluginSpecifier(item)
+            if (!spec.startsWith("file://")) continue
+            await waitDeps(deps)
+            entry = await prepPlugin(config, item, true)
+          }
+          if (!entry) continue
+          ready.push(entry)
+        }
+
+        const meta = await PluginMeta.touchMany(ready.map((item) => ({ spec: item.spec, target: item.target }))).catch(
+          (error) => {
+            log.warn("failed to track tui plugins", { error })
+            return undefined
+          },
+        )
+
+        for (let i = 0; i < ready.length; i++) {
+          const entry = ready[i]
+          if (!entry) continue
+          const hit = meta?.[i]
+          if (hit && hit.state !== "same") {
+            log.info("tui plugin metadata updated", {
+              path: entry.spec,
+              retry: entry.retry,
+              state: hit.state,
+              source: hit.entry.source,
+              version: hit.entry.version,
+              modified: hit.entry.modified,
+            })
+          }
+
+          // Keep plugin execution sequential for deterministic side effects:
+          // command registration order affects keybind/command precedence,
+          // route registration is last-wins when ids collide,
+          // and hook chains rely on stable plugin ordering.
+          await applyPlugin(input, entry, createInit(entry.spec, entry.target, hit))
         }
       },
     }).catch((error) => {
