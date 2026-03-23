@@ -156,7 +156,10 @@ export namespace Plugin {
               if (init) hooks.push(init)
             }
 
-            let plugins = cfg.plugin ?? []
+            const plugins = Flag.OPENCODE_PURE ? [] : (cfg.plugin ?? [])
+            if (Flag.OPENCODE_PURE && cfg.plugin?.length) {
+              log.info("skipping external plugins in pure mode", { count: cfg.plugin.length })
+            }
             if (plugins.length) await Config.waitForDependencies()
 
             const loaded = await Promise.all(plugins.map((item) => prepPlugin(item)))

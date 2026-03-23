@@ -21,6 +21,7 @@ import { PluginMeta } from "@/plugin/meta"
 import { addTheme, hasTheme } from "../context/theme"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { Flag } from "@/flag/flag"
 import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
 import { getTuiSlotPlugin, setupSlots, Slot as View, type HostPluginApi as HostApiBase } from "./slots"
 
@@ -492,7 +493,10 @@ export namespace TuiPlugin {
       directory: cwd,
       fn: async () => {
         const config = await TuiConfig.get()
-        const plugins = config.plugin ?? []
+        const plugins = Flag.OPENCODE_PURE ? [] : (config.plugin ?? [])
+        if (Flag.OPENCODE_PURE && config.plugin?.length) {
+          log.info("skipping external tui plugins in pure mode", { count: config.plugin.length })
+        }
         const deps: Deps = {}
 
         for (const item of INTERNAL_TUI_PLUGINS) {

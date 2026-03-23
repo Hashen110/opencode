@@ -314,4 +314,48 @@ describe("plugin.loader.shared", () => {
     await load(tmp.path)
     expect(JSON.parse(await fs.readFile(tmp.extra.mark, "utf8"))).toEqual({ source: "tuple", enabled: true })
   })
+
+  test("skips external plugins in pure mode", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const file = path.join(dir, "plugin.ts")
+        const mark = path.join(dir, "called.txt")
+        await Bun.write(
+          file,
+          [
+            "export default async () => {",
+            `  await Bun.write(${JSON.stringify(mark)}, \"called\")`,
+            "  return {}",
+            "}",
+            "",
+          ].join("\n"),
+        )
+
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ plugin: [pathToFileURL(file).href] }, null, 2),
+        )
+
+        return { mark }
+      },
+    })
+
+    const pure = process.env.OPENCODE_PURE
+    process.env.OPENCODE_PURE = "1"
+
+    try {
+      await load(tmp.path)
+      const called = await fs
+        .readFile(tmp.extra.mark, "utf8")
+        .then(() => true)
+        .catch(() => false)
+      expect(called).toBe(false)
+    } finally {
+      if (pure === undefined) {
+        delete process.env.OPENCODE_PURE
+      } else {
+        process.env.OPENCODE_PURE = pure
+      }
+    }
+  })
 })
