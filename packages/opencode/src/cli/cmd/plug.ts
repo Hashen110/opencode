@@ -19,6 +19,73 @@ import { Process } from "../../util/process"
 import { errorMessage } from "../../util/error"
 import { parsePluginSpecifier, resolvePluginTarget } from "../../plugin/shared"
 
+type Mode = "noop" | "add" | "replace"
+
+export function pluginSpec(item: unknown) {
+  if (typeof item === "string") return item
+  if (!Array.isArray(item)) return
+  if (typeof item[0] !== "string") return
+  return item[0]
+}
+
+export function patchPluginList(list: unknown[], mod: string, force = false): { mode: Mode; list: unknown[] } {
+  const pkg = parsePluginSpecifier(mod).pkg
+  const rows = list.map((item, i) => ({
+    item,
+    i,
+    spec: pluginSpec(item),
+  }))
+  const dup = rows.filter((item) => {
+    if (!item.spec) return false
+    if (item.spec === mod) return true
+    if (item.spec.startsWith("file://")) return false
+    return parsePluginSpecifier(item.spec).pkg === pkg
+  })
+
+  if (!dup.length) {
+    return {
+      mode: "add",
+      list: [...list, mod],
+    }
+  }
+
+  if (!force) {
+    return {
+      mode: "noop",
+      list,
+    }
+  }
+
+  const keep = dup[0]
+  if (!keep) {
+    return {
+      mode: "noop",
+      list,
+    }
+  }
+
+  if (dup.length === 1 && keep.spec === mod) {
+    return {
+      mode: "noop",
+      list,
+    }
+  }
+
+  const idx = new Set(dup.map((item) => item.i))
+  return {
+    mode: "replace",
+    list: rows.flatMap((item) => {
+      if (!idx.has(item.i)) return [item.item]
+      if (item.i !== keep.i) return []
+      if (typeof item.item === "string") return [mod]
+      if (Array.isArray(item.item) && typeof item.item[0] === "string") {
+        return [[mod, ...item.item.slice(1)]]
+      }
+      return [item.item]
+    }),
+  }
+}
+
 export const PlugCommand = cmd({
   command: "plug <module>",
   aliases: ["plugin"],
@@ -56,7 +123,6 @@ export const PlugCommand = cmd({
     await Instance.provide({
       directory: process.cwd(),
       fn: async () => {
-        const pkg = parsePluginSpecifier(mod).pkg
         const root = Instance.project.vcs === "git" ? Instance.worktree : Instance.directory
         const dir = args.global ? Global.Path.config : path.join(root, ".opencode")
         await mkdir(dir, { recursive: true })
@@ -153,70 +219,21 @@ export const PlugCommand = cmd({
 
           const list: unknown[] =
             data && typeof data === "object" && !Array.isArray(data) && Array.isArray(data.plugin) ? data.plugin : []
-          const spec = (item: unknown) => {
-            if (typeof item === "string") return item
-            if (!Array.isArray(item)) return
-            if (typeof item[0] !== "string") return
-            return item[0]
-          }
-          const rows = list.map((item, i) => ({
-            item,
-            i,
-            spec: spec(item),
-          }))
-          const dup = rows.filter((item) => {
-            if (!item.spec) return false
-            if (item.spec === mod) return true
-            if (item.spec.startsWith("file://")) return false
-            return parsePluginSpecifier(item.spec).pkg === pkg
-          })
+          const out = patchPluginList(list, mod, Boolean(args.force))
 
-          if (dup.length && !args.force) {
+          if (out.mode === "noop") {
             spin.stop(`Already configured in ${cfg}`)
             return true
           }
 
-          if (dup.length) {
-            const keep = dup[0]
-            if (!keep) {
-              spin.stop(`Already configured in ${cfg}`)
-              return true
-            }
-            if (dup.length === 1 && keep.spec === mod) {
-              spin.stop(`Already configured in ${cfg}`)
-              return true
-            }
-
-            const idx = new Set(dup.map((item) => item.i))
-            const next = rows.flatMap((item) => {
-              if (!idx.has(item.i)) return [item.item]
-              if (item.i !== keep.i) return []
-              if (typeof item.item === "string") return [mod]
-              if (Array.isArray(item.item) && typeof item.item[0] === "string") {
-                return [[mod, ...item.item.slice(1)]]
-              }
-              return [item.item]
-            })
-
-            const edits = modify(text, ["plugin"], next, {
-              formattingOptions: {
-                tabSize: 2,
-                insertSpaces: true,
-              },
-            })
-            await Filesystem.write(cfg, applyEdits(text, edits))
-            spin.stop(`Replaced in ${cfg}`)
-            return true
-          }
-
-          const edits = modify(text, ["plugin"], [...list, mod], {
+          const edits = modify(text, ["plugin"], out.list, {
             formattingOptions: {
               tabSize: 2,
               insertSpaces: true,
             },
           })
           await Filesystem.write(cfg, applyEdits(text, edits))
-          spin.stop(`Added to ${cfg}`)
+          spin.stop(out.mode === "replace" ? `Replaced in ${cfg}` : `Added to ${cfg}`)
           return true
         }
 
