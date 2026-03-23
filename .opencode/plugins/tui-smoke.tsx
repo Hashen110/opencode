@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { RGBA, VignetteEffect } from "@opentui/core"
-import type { TuiApi, TuiKeybindSet, TuiPluginInit, TuiPluginInput, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
+import type { TuiApi, TuiKeybindSet, TuiPluginApi, TuiPluginInit, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
 
 const tabs = ["overview", "counter", "help"]
 const bind = {
@@ -931,37 +931,35 @@ const reg = (api: TuiApi, input: Cfg, keys: Keys) => {
   ])
 }
 
-const tui = async (input: TuiPluginInput, options: Record<string, unknown> | null, meta: TuiPluginInit) => {
+const tui = async (api: TuiPluginApi, options: Record<string, unknown> | null, meta: TuiPluginInit) => {
   if (options?.enabled === false) return
 
-  await input.theme.install("./smoke-theme.json")
-  input.theme.set("smoke-theme")
+  await api.theme.install("./smoke-theme.json")
+  api.theme.set("smoke-theme")
 
   const value = cfg(options ?? undefined)
   const route = names(value)
-  const keys = input.keybind.create(bind, value.keybinds)
+  const keys = api.keybind.create(bind, value.keybinds)
   const fx = new VignetteEffect(value.vignette)
   const post = fx.apply.bind(fx)
-  input.renderer.addPostProcessFn(post)
-  input.lifecycle.onDispose(() => {
-    input.renderer.removePostProcessFn(post)
+  api.renderer.addPostProcessFn(post)
+  api.lifecycle.onDispose(() => {
+    api.renderer.removePostProcessFn(post)
   })
 
-  input.route.register([
+  api.route.register([
     {
       name: route.screen,
-      render: ({ params }) => (
-        <Screen api={input} input={value} route={route} keys={keys} meta={meta} params={params} />
-      ),
+      render: ({ params }) => <Screen api={api} input={value} route={route} keys={keys} meta={meta} params={params} />,
     },
     {
       name: route.modal,
-      render: ({ params }) => <Modal api={input} input={value} route={route} keys={keys} params={params} />,
+      render: ({ params }) => <Modal api={api} input={value} route={route} keys={keys} params={params} />,
     },
   ])
 
-  reg(input, value, keys)
-  input.slots.register(slot(value))
+  reg(api, value, keys)
+  api.slots.register(slot(value))
 }
 
 export default {

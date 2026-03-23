@@ -1,7 +1,7 @@
 import type { CliRenderer } from "@opentui/core"
 import {
   type SlotMode,
-  type TuiPluginInput,
+  type TuiHostPluginApi,
   type TuiSlotContext,
   type TuiSlotMap,
   type TuiSlots,
@@ -17,7 +17,7 @@ type SlotProps<K extends keyof TuiSlotMap> = {
 
 type Slot = <K extends keyof TuiSlotMap>(props: SlotProps<K>) => JSX.Element | null
 
-export type InitInput = Omit<TuiPluginInput<CliRenderer, JSX.Element>, "slots" | "lifecycle">
+export type HostPluginApi = TuiHostPluginApi<CliRenderer, JSX.Element>
 
 function empty<K extends keyof TuiSlotMap>(_props: SlotProps<K>) {
   return null
@@ -41,11 +41,11 @@ export function getTuiSlotPlugin(value: unknown) {
   return value.slots
 }
 
-export function setupSlots(input: InitInput): TuiSlots {
+export function setupSlots(api: HostPluginApi): TuiSlots {
   const reg = createSolidSlotRegistry<TuiSlotMap, TuiSlotContext>(
-    input.renderer,
+    api.renderer,
     {
-      theme: input.theme,
+      theme: api.theme,
     },
     {
       onPluginError(event) {

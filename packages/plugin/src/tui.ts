@@ -321,16 +321,19 @@ export type TuiPluginInit = {
   entry: TuiPluginMeta
 }
 
-export type TuiPluginInput<Renderer = CliRenderer, Node = unknown> = TuiApi<Node> & {
+export type TuiHostPluginApi<Renderer = CliRenderer, Node = unknown> = TuiApi<Node> & {
   client: ReturnType<typeof createOpencodeClientV2>
   event: TuiEventBus
   renderer: Renderer
+}
+
+export type TuiPluginApi<Renderer = CliRenderer, Node = unknown> = TuiHostPluginApi<Renderer, Node> & {
   slots: TuiSlots
   lifecycle: TuiLifecycle
 }
 
 export type TuiPlugin<Renderer = CliRenderer, Node = unknown> = (
-  input: TuiPluginInput<Renderer, Node>,
+  api: TuiPluginApi<Renderer, Node>,
   options: PluginOptions | undefined,
   init: TuiPluginInit,
 ) => Promise<void>

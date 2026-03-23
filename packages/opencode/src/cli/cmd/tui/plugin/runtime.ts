@@ -2,8 +2,8 @@ import "@opentui/solid/runtime-plugin-support"
 import {
   type TuiDispose,
   type TuiPlugin as TuiPluginFn,
+  type TuiPluginApi,
   type TuiPluginInit,
-  type TuiPluginInput,
   type TuiTheme,
 } from "@opencode-ai/plugin/tui"
 import type { JSX } from "@opentui/solid"
@@ -22,7 +22,7 @@ import { addTheme, hasTheme } from "../context/theme"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
-import { getTuiSlotPlugin, setupSlots, Slot as View, type InitInput } from "./slots"
+import { getTuiSlotPlugin, setupSlots, Slot as View, type HostPluginApi as HostApiBase } from "./slots"
 
 type Loaded = {
   item?: Config.PluginSpec
@@ -36,8 +36,8 @@ type Deps = {
   wait?: Promise<void>
 }
 
-type HostInput = InitInput & {
-  slots: TuiPluginInput<CliRenderer, JSX.Element>["slots"]
+type HostPluginApi = HostApiBase & {
+  slots: TuiPluginApi<CliRenderer, JSX.Element>["slots"]
 }
 
 type Scope = ReturnType<typeof scope>
@@ -299,7 +299,7 @@ function scope(load: Loaded, name: string) {
   const lifecycle = {
     signal: ctrl.signal,
     onDispose,
-  } satisfies TuiPluginInput<CliRenderer, JSX.Element>["lifecycle"]
+  } satisfies TuiPluginApi<CliRenderer, JSX.Element>["lifecycle"]
 
   const dispose = async () => {
     if (done) return
@@ -347,60 +347,60 @@ function scope(load: Loaded, name: string) {
   }
 }
 
-function pluginInput(input: HostInput, load: Loaded, state: Scope) {
+function pluginApi(api: HostPluginApi, load: Loaded, state: Scope) {
   const command = {
     register(cb) {
-      return state.wrap(input.command.register(cb))
+      return state.wrap(api.command.register(cb))
     },
     trigger(value) {
-      input.command.trigger(value)
+      api.command.trigger(value)
     },
-  } satisfies TuiPluginInput<CliRenderer, JSX.Element>["command"]
+  } satisfies TuiPluginApi<CliRenderer, JSX.Element>["command"]
 
   const route = {
     register(list) {
-      return state.wrap(input.route.register(list))
+      return state.wrap(api.route.register(list))
     },
     navigate(name, params) {
-      input.route.navigate(name, params)
+      api.route.navigate(name, params)
     },
     get current() {
-      return input.route.current
+      return api.route.current
     },
-  } satisfies TuiPluginInput<CliRenderer, JSX.Element>["route"]
+  } satisfies TuiPluginApi<CliRenderer, JSX.Element>["route"]
 
-  const theme = Object.create(input.theme, {
+  const theme = Object.create(api.theme, {
     install: {
       value: load.install,
       configurable: true,
       enumerable: true,
     },
-  }) satisfies TuiPluginInput<CliRenderer, JSX.Element>["theme"]
+  }) satisfies TuiPluginApi<CliRenderer, JSX.Element>["theme"]
 
   const event = {
     on(type, handler) {
-      return state.wrap(input.event.on(type, handler))
+      return state.wrap(api.event.on(type, handler))
     },
-  } satisfies TuiPluginInput<CliRenderer, JSX.Element>["event"]
+  } satisfies TuiPluginApi<CliRenderer, JSX.Element>["event"]
 
   const slots = {
     register(plugin) {
-      return state.wrap(input.slots.register(plugin))
+      return state.wrap(api.slots.register(plugin))
     },
-  } satisfies TuiPluginInput<CliRenderer, JSX.Element>["slots"]
+  } satisfies TuiPluginApi<CliRenderer, JSX.Element>["slots"]
 
   return {
-    ...input,
+    ...api,
     command,
     route,
     theme,
     event,
     slots,
     lifecycle: state.lifecycle,
-  } satisfies TuiPluginInput<CliRenderer, JSX.Element>
+  } satisfies TuiPluginApi<CliRenderer, JSX.Element>
 }
 
-async function applyPlugin(input: HostInput, load: Loaded, init: TuiPluginInit, all: Scope[]) {
+async function applyPlugin(api: HostPluginApi, load: Loaded, init: TuiPluginInit, all: Scope[]) {
   const opts = load.item ? Config.pluginOptions(load.item) : undefined
 
   for (const [name, value] of uniqueModuleEntries(load.mod)) {
@@ -420,9 +420,9 @@ async function applyPlugin(input: HostInput, load: Loaded, init: TuiPluginInit, 
     const state = scope(load, name)
     const ready = await Promise.resolve()
       .then(async () => {
-        if (slotPlugin) state.wrap(input.slots.register(slotPlugin))
+        if (slotPlugin) state.wrap(api.slots.register(slotPlugin))
         if (!tuiPlugin) return true
-        await tuiPlugin(pluginInput(input, load, state), opts, init)
+        await tuiPlugin(pluginApi(api, load, state), opts, init)
         return true
       })
       .catch((error) => {
@@ -449,7 +449,7 @@ export namespace TuiPlugin {
   let list: Scope[] = []
   export const Slot = View
 
-  export async function init(input: InitInput) {
+  export async function init(api: HostApiBase) {
     const cwd = process.cwd()
     if (loaded) {
       if (dir !== cwd) {
@@ -460,8 +460,8 @@ export namespace TuiPlugin {
 
     dir = cwd
     loaded = load({
-      ...input,
-      slots: setupSlots(input),
+      ...api,
+      slots: setupSlots(api),
     })
     return loaded
   }
@@ -478,7 +478,7 @@ export namespace TuiPlugin {
     }
   }
 
-  async function load(input: HostInput) {
+  async function load(api: HostPluginApi) {
     const cwd = process.cwd()
     const next: Scope[] = []
 
@@ -492,7 +492,7 @@ export namespace TuiPlugin {
         for (const item of INTERNAL_TUI_PLUGINS) {
           log.info("loading internal tui plugin", { name: item.name })
           const entry = prepInternalPlugin(item)
-          await applyPlugin(input, entry, createInit(entry.spec, entry.target, undefined, item.name), next)
+          await applyPlugin(api, entry, createInit(entry.spec, entry.target, undefined, item.name), next)
         }
 
         const loaded = await Promise.all(plugins.map((item) => prepPlugin(config, item)))
@@ -538,7 +538,7 @@ export namespace TuiPlugin {
           // command registration order affects keybind/command precedence,
           // route registration is last-wins when ids collide,
           // and hook chains rely on stable plugin ordering.
-          await applyPlugin(input, entry, createInit(entry.spec, entry.target, hit), next)
+          await applyPlugin(api, entry, createInit(entry.spec, entry.target, hit), next)
         }
 
         list = next

@@ -18,7 +18,7 @@ type Count = {
   command_drop: number
 }
 
-function input(count: Count) {
+function api(count: Count) {
   let selected = "opencode"
   const kv: Record<string, unknown> = {}
 
@@ -157,18 +157,18 @@ test("disposes tracked event, route, and command hooks", async () => {
       await Bun.write(
         pluginPath,
         `export default {
-  tui: async (input, options) => {
-    input.event.on("event.test", () => {})
-    input.route.register([{ name: "lifecycle.route", render: () => null }])
-    const off = input.command.register(() => [])
+  tui: async (api, options) => {
+    api.event.on("event.test", () => {})
+    api.route.register([{ name: "lifecycle.route", render: () => null }])
+    const off = api.command.register(() => [])
     off()
-    input.lifecycle.onDispose(async () => {
+    api.lifecycle.onDispose(async () => {
       const prev = await Bun.file(options.marker).text().catch(() => "")
       await Bun.write(options.marker, prev + "custom\\n")
     })
-    input.lifecycle.onDispose(async () => {
+    api.lifecycle.onDispose(async () => {
       const prev = await Bun.file(options.marker).text().catch(() => "")
-      await Bun.write(options.marker, prev + "aborted:" + String(input.lifecycle.signal.aborted) + "\\n")
+      await Bun.write(options.marker, prev + "aborted:" + String(api.lifecycle.signal.aborted) + "\\n")
     })
   },
 }
@@ -205,7 +205,7 @@ test("disposes tracked event, route, and command hooks", async () => {
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
-    await TuiPlugin.init(input(count))
+    await TuiPlugin.init(api(count))
 
     expect(count.event_add).toBe(1)
     expect(count.event_drop).toBe(0)
@@ -251,9 +251,9 @@ test("rolls back failed plugin exports and continues loading", async () => {
       await Bun.write(
         badPath,
         `export default {
-  tui: async (input, options) => {
-    input.route.register([{ name: "bad.route", render: () => null }])
-    input.lifecycle.onDispose(async () => {
+  tui: async (api, options) => {
+    api.route.register([{ name: "bad.route", render: () => null }])
+    api.lifecycle.onDispose(async () => {
       await Bun.write(options.bad_marker, "cleaned")
     })
     throw new Error("bad plugin")
@@ -265,7 +265,7 @@ test("rolls back failed plugin exports and continues loading", async () => {
       await Bun.write(
         goodPath,
         `export default {
-  tui: async (_input, options) => {
+  tui: async (_api, options) => {
     await Bun.write(options.good_marker, "called")
   },
 }
@@ -312,7 +312,7 @@ test("rolls back failed plugin exports and continues loading", async () => {
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
-    await TuiPlugin.init(input(count))
+    await TuiPlugin.init(api(count))
 
     await expect(fs.readFile(tmp.extra.badMarker, "utf8")).resolves.toBe("cleaned")
     await expect(fs.readFile(tmp.extra.goodMarker, "utf8")).resolves.toBe("called")
@@ -338,8 +338,8 @@ test(
         await Bun.write(
           pluginPath,
           `export default {
-  tui: async (input) => {
-    input.lifecycle.onDispose(() => new Promise(() => {}))
+  tui: async (api) => {
+    api.lifecycle.onDispose(() => new Promise(() => {}))
   },
 }
 `,
@@ -374,7 +374,7 @@ test(
     const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
     try {
-      await TuiPlugin.init(input(count))
+      await TuiPlugin.init(api(count))
 
       const done = await new Promise<string>((resolve) => {
         const timer = setTimeout(() => {

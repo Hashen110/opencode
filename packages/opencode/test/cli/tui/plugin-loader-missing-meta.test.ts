@@ -26,7 +26,7 @@ test("continues loading tui plugins when a plugin is missing config metadata", a
       await Bun.write(
         badPluginPath,
         `export default {
-  tui: async (_input, options) => {
+  tui: async (_api, options) => {
     if (!options?.marker) return
     await Bun.write(options.marker, "called")
   },
@@ -37,7 +37,7 @@ test("continues loading tui plugins when a plugin is missing config metadata", a
       await Bun.write(
         nextPluginPath,
         `export default {
-  tui: async (_input, options) => {
+  tui: async (_api, options) => {
     if (!options?.marker) return
     await Bun.write(options.marker, "called")
   },
@@ -48,7 +48,7 @@ test("continues loading tui plugins when a plugin is missing config metadata", a
       await Bun.write(
         plainPluginPath,
         `export default {
-  tui: async (_input, options) => {
+  tui: async (_api, options) => {
     await Bun.write(${JSON.stringify(plainMarker)}, options === undefined ? "undefined" : options === null ? "null" : "value")
   },
 }

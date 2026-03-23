@@ -83,37 +83,37 @@ async function load() {
 }
 
 export const object_plugin = {
-  tui: async (input, options) => {
+  tui: async (api, options) => {
     if (!options?.marker) return
-    const key = input.keybind.create(
+    const key = api.keybind.create(
       { modal: "ctrl+shift+m", screen: "ctrl+shift+o", close: "escape" },
       options.keybinds,
     )
-    const kv_before = input.kv.get(options.kv_key, "missing")
-    input.kv.set(options.kv_key, "stored")
-    const kv_after = input.kv.get(options.kv_key, "missing")
-    const diff = input.state.session.diff(options.session_id)
-    const todo = input.state.session.todo(options.session_id)
-    const lsp = input.state.lsp()
-    const mcp = input.state.mcp()
-    const depth_before = input.ui.dialog.depth
-    const open_before = input.ui.dialog.open
-    const size_before = input.ui.dialog.size
-    input.ui.dialog.setSize("large")
-    const size_after = input.ui.dialog.size
-    input.ui.dialog.replace(() => null)
-    const depth_after = input.ui.dialog.depth
-    const open_after = input.ui.dialog.open
-    input.ui.dialog.clear()
-    const open_clear = input.ui.dialog.open
-    const before = input.theme.has(options.theme_name)
-    const set_missing = input.theme.set(options.theme_name)
-    await input.theme.install(options.theme_path)
-    const after = input.theme.has(options.theme_name)
-    const set_installed = input.theme.set(options.theme_name)
+    const kv_before = api.kv.get(options.kv_key, "missing")
+    api.kv.set(options.kv_key, "stored")
+    const kv_after = api.kv.get(options.kv_key, "missing")
+    const diff = api.state.session.diff(options.session_id)
+    const todo = api.state.session.todo(options.session_id)
+    const lsp = api.state.lsp()
+    const mcp = api.state.mcp()
+    const depth_before = api.ui.dialog.depth
+    const open_before = api.ui.dialog.open
+    const size_before = api.ui.dialog.size
+    api.ui.dialog.setSize("large")
+    const size_after = api.ui.dialog.size
+    api.ui.dialog.replace(() => null)
+    const depth_after = api.ui.dialog.depth
+    const open_after = api.ui.dialog.open
+    api.ui.dialog.clear()
+    const open_clear = api.ui.dialog.open
+    const before = api.theme.has(options.theme_name)
+    const set_missing = api.theme.set(options.theme_name)
+    await api.theme.install(options.theme_path)
+    const after = api.theme.has(options.theme_name)
+    const set_installed = api.theme.set(options.theme_name)
     const first = await Bun.file(options.dest).text()
     await Bun.write(options.source, JSON.stringify({ theme: { primary: "#fefefe" } }, null, 2))
-    await input.theme.install(options.theme_path)
+    await api.theme.install(options.theme_path)
     const second = await Bun.file(options.dest).text()
     await Bun.write(
       options.marker,
@@ -122,7 +122,7 @@ export const object_plugin = {
         set_missing,
         after,
         set_installed,
-        selected: input.theme.selected,
+        selected: api.theme.selected,
         same: first === second,
         key_modal: key.get("modal"),
         key_close: key.get("close"),
@@ -130,7 +130,7 @@ export const object_plugin = {
         key_print: key.print("modal"),
         kv_before,
         kv_after,
-        kv_ready: input.kv.ready,
+        kv_ready: api.kv.ready,
         diff_count: diff.length,
         diff_file: diff[0]?.file,
         todo_count: todo.length,
@@ -155,13 +155,13 @@ export const object_plugin = {
       await Bun.write(
         invalidPluginPath,
         `export default {
-  tui: async (input, options) => {
+  tui: async (api, options) => {
     if (!options?.marker) return
-    const before = input.theme.has(options.theme_name)
-    const set_missing = input.theme.set(options.theme_name)
-    await input.theme.install(options.theme_path)
-    const after = input.theme.has(options.theme_name)
-    const set_installed = input.theme.set(options.theme_name)
+    const before = api.theme.has(options.theme_name)
+    const set_missing = api.theme.set(options.theme_name)
+    await api.theme.install(options.theme_path)
+    const after = api.theme.has(options.theme_name)
+    const set_installed = api.theme.set(options.theme_name)
     await Bun.write(
       options.marker,
       JSON.stringify({
@@ -179,11 +179,11 @@ export const object_plugin = {
       await Bun.write(
         preloadedPluginPath,
         `export default {
-  tui: async (input, options) => {
+  tui: async (api, options) => {
     if (!options?.marker) return
-    const before = input.theme.has(options.theme_name)
-    await input.theme.install(options.theme_path)
-    const after = input.theme.has(options.theme_name)
+    const before = api.theme.has(options.theme_name)
+    await api.theme.install(options.theme_path)
+    const after = api.theme.has(options.theme_name)
     const text = await Bun.file(options.dest).text()
     await Bun.write(
       options.marker,
@@ -201,17 +201,17 @@ export const object_plugin = {
       await Bun.write(
         globalPluginPath,
         `export default {
-  tui: async (input, options) => {
+  tui: async (api, options) => {
     if (!options?.marker) return
-    await input.theme.install(options.theme_path)
-    const has = input.theme.has(options.theme_name)
-    const set_installed = input.theme.set(options.theme_name)
+    await api.theme.install(options.theme_path)
+    const has = api.theme.has(options.theme_name)
+    const set_installed = api.theme.set(options.theme_name)
     await Bun.write(
       options.marker,
       JSON.stringify({
         has,
         set_installed,
-        selected: input.theme.selected,
+        selected: api.theme.selected,
       }),
     )
   },
