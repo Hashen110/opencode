@@ -3,7 +3,7 @@ import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
-import { BunProc } from "../bun"
+import { Npm } from "../npm"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
@@ -45,7 +45,7 @@ export namespace Plugin {
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin]
 
-  // Old npm package names for plugins that are now built-in — skip if users still have them in config
+  // Old npm package names for plugins that are now built-in - skip if users still have them in config
   const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth", "opencode-copilot-auth"]
 
   export const layer = Layer.effect(
@@ -95,16 +95,13 @@ export namespace Plugin {
               if (DEPRECATED_PLUGIN_PACKAGES.some((pkg) => plugin.includes(pkg))) continue
               log.info("loading plugin", { path: plugin })
               if (!plugin.startsWith("file://")) {
-                const idx = plugin.lastIndexOf("@")
-                const pkg = idx > 0 ? plugin.substring(0, idx) : plugin
-                const version = idx > 0 ? plugin.substring(idx + 1) : "latest"
-                plugin = await BunProc.install(pkg, version).catch((err) => {
+                plugin = await Npm.add(plugin).catch((err) => {
                   const cause = err instanceof Error ? err.cause : err
                   const detail = cause instanceof Error ? cause.message : String(cause ?? err)
-                  log.error("failed to install plugin", { pkg, version, error: detail })
+                  log.error("failed to install plugin", { plugin, error: detail })
                   Bus.publish(Session.Event.Error, {
                     error: new NamedError.Unknown({
-                      message: `Failed to install plugin ${pkg}@${version}: ${detail}`,
+                      message: `Failed to install plugin ${plugin}: ${detail}`,
                     }).toObject(),
                   })
                   return ""
@@ -124,7 +121,7 @@ export namespace Plugin {
                     hooks.push(await fn(input))
                   }
                 })
-                .catch((err) => {
+                .catch((err: unknown) => {
                   const message = err instanceof Error ? err.message : String(err)
                   log.error("failed to load plugin", { path: plugin, error: message })
                   Bus.publish(Session.Event.Error, {
